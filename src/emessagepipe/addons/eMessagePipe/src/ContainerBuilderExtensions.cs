@@ -17,13 +17,24 @@ public static class ContainerBuilderExtensions
 
     public static MessagePipeOptions RegisterMessagePipe(this IContainerBuilder builder, Action<MessagePipeOptions> configure)
     {
-        MessagePipeOptions options = null;
-        var proxy = new ContainerBuilderProxy(builder);
-        proxy.AddMessagePipe(x =>
-        {
-            configure(x);
-            options = x;
-        });
+        var options = new MessagePipeOptions();
+        configure(options);
+
+        // AddMessagePipe registers these through IServiceCollection.  A
+        // ContainerBuilderProxy is not an IServiceCollection adapter, though:
+        // IServiceCollection.Add stores descriptors on ServiceCollection and
+        // never forwards them to VContainer.  Register the shared services on
+        // the actual builder instead.
+        builder.RegisterInstance(options);
+        builder.Register<MessagePipeDiagnosticsInfo>(Lifetime.Singleton);
+        builder.Register<AttributeFilterProvider<MessageHandlerFilterAttribute>>(Lifetime.Singleton);
+        builder.Register<AttributeFilterProvider<AsyncMessageHandlerFilterAttribute>>(Lifetime.Singleton);
+        builder.Register<AttributeFilterProvider<RequestHandlerFilterAttribute>>(Lifetime.Singleton);
+        builder.Register<AttributeFilterProvider<AsyncRequestHandlerFilterAttribute>>(Lifetime.Singleton);
+        builder.Register<FilterAttachedMessageHandlerFactory>(Lifetime.Singleton);
+        builder.Register<FilterAttachedAsyncMessageHandlerFactory>(Lifetime.Singleton);
+        builder.Register<FilterAttachedRequestHandlerFactory>(Lifetime.Singleton);
+        builder.Register<FilterAttachedAsyncRequestHandlerFactory>(Lifetime.Singleton);
 
         builder.Register<IServiceProvider, ObjectResolverProxy>(Lifetime.Scoped);
 
