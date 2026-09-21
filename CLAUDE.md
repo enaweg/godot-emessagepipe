@@ -48,4 +48,4 @@ Registration entry point: `LifetimeScope.Configure(IContainerBuilder)` (override
 
 ### No application code yet
 
-`test.tscn` is currently an empty placeholder scene set as `run/main_scene`. There is no game/application code under `src/emessagepipe/` outside the `addons/` plugins themselves, and no tests have been written yet (gdUnit4 is installed and wired into `eMessagePipe.csproj` via the `gdUnit4.test.adapter`/`gdUnit4.analyzers`/`Microsoft.NET.Test.Sdk` package references, ready for `dotnet test` once tests exist).
+`test.tscn` is currently an empty placeholder scene set as `run/main_scene`. There is no game/application code under `src/emessagepipe/` outside the `addons/` plugins themselves. The only tests are `test/ContainerBuilderExtensionsTest.cs`, which covers the eMessagePipe ↔ VContainer bridge; gdUnit4 is wired into `eMessagePipe.csproj` via the `gdUnit4.test.adapter`/`gdUnit4.analyzers`/`Microsoft.NET.Test.Sdk` package references, so `dotnet test` runs them.
