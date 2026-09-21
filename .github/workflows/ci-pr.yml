@@ -1,0 +1,53 @@
+name: CI-PR
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Godot .NET
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: true
+
+      - name: Configure Godot executable
+        shell: bash
+        run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb
+
+      - name: Restore NuGet packages
+        working-directory: src/emessagepipe
+        run: dotnet restore eMessagePipe.sln
+
+      - name: Build
+        working-directory: src/emessagepipe
+        run: dotnet build eMessagePipe.sln --configuration Debug --no-restore
+
+      - name: Rebuild Godot project cache
+        working-directory: src/emessagepipe
+        run: |
+          "$GODOT_BIN" --path . --editor --headless --quit-after 2000
+
+      - name: Run gdUnit4 tests
+        working-directory: src/emessagepipe
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            dotnet test eMessagePipe.sln --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
