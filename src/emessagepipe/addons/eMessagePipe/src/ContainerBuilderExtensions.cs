@@ -6,25 +6,53 @@ using VContainer;
 
 namespace Enaweg.MessagePipe;
 
+/// <summary>
+/// Registers MessagePipe into a VContainer <see cref="IContainerBuilder"/>.
+/// </summary>
+/// <remarks>
+/// This mirrors MessagePipe's own <c>ServiceCollectionExtensions</c>, minus the open-generic
+/// registrations: VContainer resolves closed generics only, so every message type has to be
+/// registered explicitly with <see cref="RegisterMessageBroker{TMessage}"/> and friends.
+/// </remarks>
 public static class ContainerBuilderExtensions
 {
-    // original is ServiceCollectionExtensions, trimed openegenerics register.
-
+    /// <summary>
+    /// Registers MessagePipe's shared services into the scope with default options.
+    /// </summary>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns>
+    /// The <see cref="MessagePipeOptions"/> instance registered into the scope. Pass it to the
+    /// <c>RegisterMessageBroker</c> / <c>RegisterRequestHandler</c> overloads.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder.</exception>
     public static MessagePipeOptions RegisterMessagePipe(this IContainerBuilder builder)
     {
         return RegisterMessagePipe(builder, _ => { });
     }
 
+    /// <summary>
+    /// Registers MessagePipe's shared services into the scope, configuring the options first.
+    /// </summary>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <param name="configure">Callback applied to the options before they are registered.</param>
+    /// <returns>
+    /// The <see cref="MessagePipeOptions"/> instance registered into the scope. Pass it to the
+    /// <c>RegisterMessageBroker</c> / <c>RegisterRequestHandler</c> overloads.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder.</exception>
     public static MessagePipeOptions RegisterMessagePipe(this IContainerBuilder builder, Action<MessagePipeOptions> configure)
     {
+        if (builder.Exists(typeof(MessagePipeOptions), true))
+        {
+            throw new InvalidOperationException(
+                "MessagePipe is already registered on this container builder. Call RegisterMessagePipe once "
+                + "per LifetimeScope and pass the MessagePipeOptions it returns to the RegisterMessageBroker "
+                + "and RegisterRequestHandler overloads.");
+        }
+
         var options = new MessagePipeOptions();
         configure(options);
 
-        // AddMessagePipe registers these through IServiceCollection.  A
-        // ContainerBuilderProxy is not an IServiceCollection adapter, though:
-        // IServiceCollection.Add stores descriptors on ServiceCollection and
-        // never forwards them to VContainer.  Register the shared services on
-        // the actual builder instead.
         builder.RegisterInstance(options);
         builder.Register<MessagePipeDiagnosticsInfo>(Lifetime.Singleton);
         builder.Register<AttributeFilterProvider<MessageHandlerFilterAttribute>>(Lifetime.Singleton);
@@ -35,13 +63,21 @@ public static class ContainerBuilderExtensions
         builder.Register<FilterAttachedAsyncMessageHandlerFactory>(Lifetime.Singleton);
         builder.Register<FilterAttachedRequestHandlerFactory>(Lifetime.Singleton);
         builder.Register<FilterAttachedAsyncRequestHandlerFactory>(Lifetime.Singleton);
+        builder.Register<EventFactory>(Lifetime.Singleton);
 
         builder.Register<IServiceProvider, ObjectResolverProxy>(Lifetime.Scoped);
 
         return options;
     }
 
-    /// <summary>Register IPublisher[TMessage] and ISubscriber[TMessage](includes Async/Buffered) to container builder.</summary>
+    /// <summary>
+    /// Registers the keyless publisher/subscriber pair for <typeparamref name="TMessage"/>, in its
+    /// plain, async, buffered and buffered-async forms.
+    /// </summary>
+    /// <typeparam name="TMessage">The message type to register a broker for.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterMessageBroker<TMessage>(this IContainerBuilder builder, MessagePipeOptions options)
     {
         var lifetime = GetLifetime(options.InstanceLifetime);
@@ -70,7 +106,15 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
-    /// <summary>Register IPublisher[TKey, TMessage] and ISubscriber[TKey, TMessage](includes Async) to container builder.</summary>
+    /// <summary>
+    /// Registers the keyed publisher/subscriber pair for <typeparamref name="TMessage"/>, in its
+    /// plain and async forms.
+    /// </summary>
+    /// <typeparam name="TKey">The key messages are published and subscribed under.</typeparam>
+    /// <typeparam name="TMessage">The message type to register a broker for.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterMessageBroker<TKey, TMessage>(this IContainerBuilder builder, MessagePipeOptions options)
     {
         var lifetime = GetLifetime(options.InstanceLifetime);
@@ -89,7 +133,16 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
-    /// <summary>Register IRequestHandler[TRequest, TResponse](includes All) to container builder.</summary>
+    /// <summary>
+    /// Registers <typeparamref name="THandler"/> as a request handler, along with the
+    /// <c>IRequestHandler</c> and <c>IRequestAllHandler</c> entry points for the request type.
+    /// </summary>
+    /// <typeparam name="TRequest">The request type.</typeparam>
+    /// <typeparam name="TResponse">The response type.</typeparam>
+    /// <typeparam name="THandler">The concrete handler to register.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterRequestHandler<TRequest, TResponse, THandler>(this IContainerBuilder builder, MessagePipeOptions options)
         where THandler : IRequestHandler
     {
@@ -106,7 +159,20 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
-    /// <summary>Register IAsyncRequestHandler[TRequest, TResponse](includes All) to container builder.</summary>
+    /// <summary>
+    /// Registers <typeparamref name="THandler"/> as an async request handler, along with the
+    /// <c>IAsyncRequestHandler</c> and <c>IAsyncRequestAllHandler</c> entry points for the request type.
+    /// </summary>
+    /// <typeparam name="TRequest">The request type.</typeparam>
+    /// <typeparam name="TResponse">The response type.</typeparam>
+    /// <typeparam name="THandler">The concrete handler to register.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
+    /// <remarks>
+    /// The handler is also recorded in MessagePipe's static <see cref="AsyncRequestHandlerRegistory"/>,
+    /// which is process-global and outlives any individual scope.
+    /// </remarks>
     public static IContainerBuilder RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(this IContainerBuilder builder, MessagePipeOptions options)
         where THandler : IAsyncRequestHandler
     {
@@ -124,6 +190,10 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
+    /// <summary>Registers a message handler filter, unless it is already registered.</summary>
+    /// <typeparam name="T">The filter type.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterMessageHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IMessageHandlerFilter
     {
@@ -134,6 +204,10 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
+    /// <summary>Registers an async message handler filter, unless it is already registered.</summary>
+    /// <typeparam name="T">The filter type.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterAsyncMessageHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IAsyncMessageHandlerFilter
     {
@@ -144,6 +218,10 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
+    /// <summary>Registers a request handler filter, unless it is already registered.</summary>
+    /// <typeparam name="T">The filter type.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterRequestHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IRequestHandlerFilter
     {
@@ -154,6 +232,10 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
+    /// <summary>Registers an async request handler filter, unless it is already registered.</summary>
+    /// <typeparam name="T">The filter type.</typeparam>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterAsyncRequestHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IAsyncRequestHandlerFilter
     {
@@ -165,20 +247,31 @@ public static class ContainerBuilderExtensions
         return builder;
     }
 
-    public static Microsoft.Extensions.DependencyInjection.IServiceCollection AsServiceCollection(this IContainerBuilder builder)
+    /// <summary>
+    /// Exposes the container builder as an <see cref="IServiceCollection"/> whose registrations are
+    /// forwarded to VContainer.
+    /// </summary>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns>An <see cref="IServiceCollection"/> view over <paramref name="builder"/>.</returns>
+    /// <remarks>
+    /// VContainer cannot un-register, so the returned collection throws
+    /// <see cref="NotSupportedException"/> from <c>Remove</c>, <c>RemoveAt</c> and <c>Clear</c>.
+    /// </remarks>
+    public static IServiceCollection AsServiceCollection(this IContainerBuilder builder)
     {
         return new ContainerBuilderProxy(builder);
     }
 
+    /// <summary>
+    /// Exposes the container builder as an <see cref="IMessagePipeBuilder"/>, so MessagePipe's own
+    /// builder extensions register into VContainer.
+    /// </summary>
+    /// <param name="builder">The scope's container builder.</param>
+    /// <returns>An <see cref="IMessagePipeBuilder"/> backed by <paramref name="builder"/>.</returns>
     public static IMessagePipeBuilder ToMessagePipeBuilder(this IContainerBuilder builder)
     {
         return new MessagePipeBuilder(builder.AsServiceCollection());
     }
 
-    static Lifetime GetLifetime(InstanceLifetime lifetime)
-    {
-        return (lifetime == InstanceLifetime.Scoped) ? Lifetime.Scoped
-            : (lifetime == InstanceLifetime.Singleton) ? Lifetime.Singleton
-            : Lifetime.Transient;
-    }
+    static Lifetime GetLifetime(InstanceLifetime lifetime) => LifetimeMapping.ToVContainer(lifetime);
 }
