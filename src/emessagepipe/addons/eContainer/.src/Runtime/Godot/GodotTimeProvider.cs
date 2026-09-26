@@ -7,9 +7,13 @@ using Godot;
 
 namespace Enaweg.Container.Godot;
 
+/// <summary>A <see cref="TimeProvider"/> driven by Godot's process or physics loop.</summary>
+/// <remarks>The providers advance only while the eContainer <see cref="FrameProviderDispatcher"/> is active.</remarks>
 public class GodotTimeProvider : TimeProvider
 {
+	/// <summary>The time provider advanced from Godot's <c>_Process</c> loop.</summary>
     public static readonly GodotTimeProvider Process = new GodotTimeProvider(GodotFrameProvider.Process);
+	/// <summary>The time provider advanced from Godot's <c>_PhysicsProcess</c> loop.</summary>
     public static readonly GodotTimeProvider PhysicsProcess = new GodotTimeProvider(GodotFrameProvider.PhysicsProcess);
 
     readonly GodotFrameProvider frameProvider;
@@ -21,11 +25,13 @@ public class GodotTimeProvider : TimeProvider
         this.frameProvider = (GodotFrameProvider)frameProvider;
     }
 
+    /// <inheritdoc />
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         return new FrameTimer(callback, state, dueTime, period, frameProvider);
     }
 
+    /// <inheritdoc />
     public override long GetTimestamp()
     {
         return TimeSpan.FromSeconds(time).Ticks;
@@ -66,6 +72,9 @@ internal sealed class FrameTimer : ITimer, IFrameRunnerWorkItem
     public bool Change(TimeSpan dueTime, TimeSpan period)
     {
         if (isDisposed) return false;
+
+        ValidateTimeout(dueTime, nameof(dueTime));
+        ValidateTimeout(period, nameof(period));
 
         lock (gate)
         {
@@ -128,7 +137,9 @@ internal sealed class FrameTimer : ITimer, IFrameRunnerWorkItem
                     callback(state);
 
                     elapsed = 0;
-                    if (period == Timeout.InfiniteTimeSpan)
+                    // A zero period has the same one-shot behavior as System.Threading.Timer.
+                    // Leaving it in RunningPeriod made it invoke once per Godot frame.
+                    if (period == Timeout.InfiniteTimeSpan || period == TimeSpan.Zero)
                     {
                         return ChangeState(RunningState.Stop);
                     }
@@ -180,6 +191,15 @@ internal sealed class FrameTimer : ITimer, IFrameRunnerWorkItem
                     runningState = state;
                     return false;
             }
+        }
+    }
+
+    static void ValidateTimeout(TimeSpan timeout, string parameterName)
+    {
+        if (timeout < TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(parameterName, timeout,
+                "Timeout must be non-negative or Timeout.InfiniteTimeSpan.");
         }
     }
 

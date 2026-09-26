@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
+using Godot;
 
 namespace Enaweg.Container.Godot;
 
 public sealed class FixedTickableLoopItem : IFrameRunnerWorkItem, IDisposable
 {
 	readonly IReadOnlyList<IPhysicsTickable> entries;
-	readonly EntryPointExceptionHandler exceptionHandler;
+	readonly EntryPointExceptionHandler? exceptionHandler;
 	bool disposed;
 
 	public FixedTickableLoopItem(
 		IReadOnlyList<IPhysicsTickable> entries,
-		EntryPointExceptionHandler exceptionHandler)
+		EntryPointExceptionHandler? exceptionHandler)
 	{
 		this.entries = entries;
 		this.exceptionHandler = exceptionHandler;
@@ -28,8 +29,12 @@ public sealed class FixedTickableLoopItem : IFrameRunnerWorkItem, IDisposable
 			}
 			catch (Exception ex)
 			{
-				if (exceptionHandler == null) throw;
-				exceptionHandler.Publish(ex);
+				// Never rethrow: GodotFrameProvider.Run() deregisters a work item that throws,
+				// which would silently stop every other entry in this scope too.
+				if (exceptionHandler != null)
+					exceptionHandler.Publish(ex);
+				else
+					GD.PrintErr(ex);
 			}
 		}
 
@@ -39,7 +44,7 @@ public sealed class FixedTickableLoopItem : IFrameRunnerWorkItem, IDisposable
 	public void Dispose() => disposed = true;
 }
 
-public sealed class TickableLoopItem(IReadOnlyList<ITickable> entries, EntryPointExceptionHandler exceptionHandler) : IFrameRunnerWorkItem, IDisposable
+public sealed class TickableLoopItem(IReadOnlyList<ITickable> entries, EntryPointExceptionHandler? exceptionHandler) : IFrameRunnerWorkItem, IDisposable
 {
 	bool disposed;
 
@@ -54,8 +59,12 @@ public sealed class TickableLoopItem(IReadOnlyList<ITickable> entries, EntryPoin
 			}
 			catch (Exception ex)
 			{
-				if (exceptionHandler == null) throw;
-				exceptionHandler.Publish(ex);
+				// Never rethrow: GodotFrameProvider.Run() deregisters a work item that throws,
+				// which would silently stop every other entry in this scope too.
+				if (exceptionHandler != null)
+					exceptionHandler.Publish(ex);
+				else
+					GD.PrintErr(ex);
 			}
 		}
 
