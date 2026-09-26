@@ -45,7 +45,13 @@ public static class DiagnosticsHelper
         for (var i = 0; i < stackTrace.FrameCount; i++)
         {
             var sf = stackTrace.GetFrame(i);
+
+            // Frames without resolvable metadata (native, inlined or trimmed) have no method or no declaring
+            // type. They carry nothing worth printing and must not throw - this runs inside the log pipeline.
+            if (sf is null) continue;
+
             var mb = sf.GetMethod();
+            if (mb?.DeclaringType is null) continue;
 
             if (IgnoreLine(mb)) continue;
 
@@ -57,7 +63,7 @@ public static class DiagnosticsHelper
             }
 
             // method name
-            sb.Append(BeautifyType(mb.DeclaringType!, false));
+            sb.Append(BeautifyType(mb.DeclaringType, false));
             if (!mb.IsConstructor)
             {
                 sb.Append(".");
@@ -134,6 +140,12 @@ public static class DiagnosticsHelper
         var innerFormat = string.Join(", ", t.GetGenericArguments().Select(x => BeautifyType(x, true)));
 
         var genericType = t.GetGenericTypeDefinition().FullName;
+        if (genericType is null)
+        {
+            return typeBeautifyRegex.Replace(shortName ? t.Name : t.FullName ?? t.Name, "") + "<" + innerFormat +
+                   ">";
+        }
+
         if (genericType == "System.Threading.Tasks.Task`1")
         {
             genericType = "Task";
@@ -146,7 +158,12 @@ public static class DiagnosticsHelper
 
     static bool IgnoreLine(MethodBase methodInfo)
     {
-        var declareType = methodInfo.DeclaringType!.FullName!;
+        var declareType = methodInfo.DeclaringType?.FullName;
+        if (declareType is null)
+        {
+            return false;
+        }
+
         if (declareType.StartsWith("ZLogger"))
         {
             return true;

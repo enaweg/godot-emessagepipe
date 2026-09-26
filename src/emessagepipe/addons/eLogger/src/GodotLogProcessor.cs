@@ -30,6 +30,7 @@ public sealed class GodotLogProcessor : IAsyncLogProcessor
         {
             var msg = FormatToString(log, formatter);
 
+            using var _ = GodotLogGuard.Enter();
             switch (log.LogInfo.LogLevel)
             {
                 case LogLevel.Trace:
@@ -53,7 +54,9 @@ public sealed class GodotLogProcessor : IAsyncLogProcessor
                 case LogLevel.None:
                     break;
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    // An unknown level must never take down the caller's log statement - print it plainly.
+                    GD.Print(msg);
+                    break;
             }
         }
         finally
