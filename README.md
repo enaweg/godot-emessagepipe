@@ -16,6 +16,50 @@ using [eContainer](https://github.com/enaweg/godot-econtainer).**
 
 </div>
 
+## What is MessagePipe?
+
+[MessagePipe](https://github.com/Cysharp/MessagePipe) is Cysharp's high-performance in-memory/distributed messaging
+library for .NET and Unity. Instead of wiring senders directly to receivers (or to Godot signals), a component asks the
+DI container for a typed publisher or subscriber and talks to a *message type*. Publisher and subscriber never learn
+about each other, which keeps scenes, services and systems decoupled and independently testable.
+
+eMessagePipe integrates MessagePipe 1.8.2 into eContainer's scopes, so all of the below resolves out of the same
+`LifetimeScope` as the rest of your registrations.
+
+### Major features
+
++ **Typed publish/subscribe** — `IPublisher<TMessage>` / `ISubscriber<TMessage>` replace events and signal strings with
+  a message type. Subscribing returns an `IDisposable`; `DisposableBag` bundles many subscriptions into one dispose call,
+  which maps cleanly onto a node's `_ExitTree`.
++ **Keyed (topic) brokers** — `IPublisher<TKey, TMessage>` / `ISubscriber<TKey, TMessage>` route the same message type by
+  key, so one broker can serve many entities, channels or states.
++ **Async publish/subscribe** — `IAsyncPublisher<TMessage>` / `IAsyncSubscriber<TMessage>` await every handler.
+  `MessagePipeOptions.DefaultAsyncPublishStrategy` selects `Parallel` or `Sequential` handler execution, and
+  `PublishAsync` accepts a `CancellationToken`.
++ **Buffered brokers** — `IBufferedPublisher<TMessage>` / `IBufferedSubscriber<TMessage>` retain the most recent message
+  and replay it to new subscribers, which suits state-like values (current health, current game phase) where a late
+  subscriber still needs the last known value.
++ **Request/response handlers** — `IRequestHandler<TRequest, TResponse>` and its async counterpart give a mediator-style
+  one-to-one call; `IRequestAllHandler<TRequest, TResponse>` fans the request out to every registered handler and
+  collects the responses.
++ **Filters** — `MessageHandlerFilter<T>`, `AsyncMessageHandlerFilter<T>`, `RequestHandlerFilter<T>` and their async
+  variants form an ordered middleware pipeline around handlers, for cross-cutting concerns such as logging, validation,
+  predicate-based filtering or de-duplication. Filters are themselves resolved from the container and can be attached
+  globally, per subscription, or by attribute.
++ **Performance-oriented design** — handler invocation goes through array-based broker cores rather than reflection or
+  delegate chains, keeping publish paths allocation-light; MessagePipe's own benchmarks put it well ahead of plain C#
+  events and Rx-style pipelines.
++ **Diagnostics** — `MessagePipeDiagnosticsInfo` reports live subscription counts, and
+  `MessagePipeOptions.EnableCaptureStackTrace` records where each subscription was created, which makes leaked
+  subscriptions findable.
++ **`MessagePipe.Analyzer`** — a Roslyn analyzer, installed alongside the library, whose `MPA001` diagnostic reports a
+  discarded `IDisposable` from `Subscribe` — the most common source of subscription leaks.
+
+Two upstream notes specific to this integration: VContainer resolves closed generics only, so every message type is
+registered explicitly (see [Examples](#examples)) rather than through MessagePipe's open-generic auto-registration; and
+MessagePipe's distributed transports (Redis, in-process, WebSocket, gRPC/MagicOnion) ship as separate packages that
+eMessagePipe does not install.
+
 ## Requirements
 
 The current CI-tested configuration uses:
