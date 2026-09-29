@@ -4,8 +4,8 @@
 
 # eMessagePipe
 
-**[MessagePipe](https://github.com/Cysharp/MessagePipe) integration for [Godot](https://godotengine.org/) .NET projects
-using [eContainer](https://github.com/enaweg/godot-econtainer).**
+**[MessagePipe](https://github.com/Cysharp/MessagePipe) support for [Godot](https://godotengine.org/) .NET projects,
+with an optional integration for [eContainer](https://github.com/enaweg/godot-econtainer).**
 
 [![CI](https://github.com/enaweg/godot-emessagepipe/actions/workflows/ci-pr.yml/badge.svg)](https://github.com/enaweg/godot-emessagepipe/actions/workflows/ci-pr.yml)
 ![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
@@ -29,8 +29,10 @@ library for .NET and Unity. Instead of wiring senders directly to receivers (or 
 DI container for a typed publisher or subscriber and talks to a *message type*. Publisher and subscriber never learn
 about each other, which keeps scenes, services and systems decoupled and independently testable.
 
-eMessagePipe integrates MessagePipe 1.8.2 into eContainer's scopes, so all of the below resolves out of the same
-`LifetimeScope` as the rest of your registrations.
+When [eContainer](https://github.com/enaweg/godot-econtainer) is enabled, eMessagePipe integrates MessagePipe 1.8.2
+into its scopes, so publishers and subscribers resolve from the same `LifetimeScope` as the rest of your registrations.
+Without eContainer, eMessagePipe still installs the MessagePipe packages, and you can use MessagePipe with another
+dependency injection setup.
 
 ### Major features
 
@@ -61,10 +63,10 @@ eMessagePipe integrates MessagePipe 1.8.2 into eContainer's scopes, so all of th
 + **`MessagePipe.Analyzer`** — a Roslyn analyzer, installed alongside the library, whose `MPA001` diagnostic reports a
   discarded `IDisposable` from `Subscribe` — the most common source of subscription leaks.
 
-Two upstream notes specific to this integration: VContainer resolves closed generics only, so every message type is
-registered explicitly (see [Examples](#examples)) rather than through MessagePipe's open-generic auto-registration; and
-MessagePipe's distributed transports (Redis, in-process, WebSocket, gRPC/MagicOnion) ship as separate packages that
-eMessagePipe does not install.
+Two upstream notes specific to the eContainer integration: VContainer resolves closed generics only, so every message
+type is registered explicitly (see [Examples](#examples)) rather than through MessagePipe's open-generic
+auto-registration; and MessagePipe's distributed transports (Redis, in-process, WebSocket, gRPC/MagicOnion) ship as
+separate packages that eMessagePipe does not install.
 
 ## Requirements
 
@@ -73,27 +75,29 @@ The current CI-tested configuration uses:
 + [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/)
 + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 + [ePlugin Framework](https://github.com/enaweg/godot-epluginframework)
-+ [eContainer](https://github.com/enaweg/godot-econtainer)
++ [eContainer](https://github.com/enaweg/godot-econtainer) (optional; required for the VContainer integration)
 
 The project targets `net8.0`.
 
 ## Installation
 
-1. Install and enable [ePlugin Framework](https://github.com/enaweg/godot-epluginframework)
-   and [eContainer](https://github.com/enaweg/godot-econtainer) in your Godot .NET project.
+1. Install and enable [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) in your Godot .NET project.
+   Install and enable [eContainer](https://github.com/enaweg/godot-econtainer) as well if you want its VContainer
+   integration.
 2. Download the latest eMessagePipe release and extract the archive's `addons/eMessagePipe` directory into your Godot
    project's `addons` directory. For development, clone this repository instead.
 3. Open the project in the Godot .NET editor and enable **eMessagePipe** under **Project > Project Settings > Plugins**.
 4. Let ePlugin complete the package installation and project reload.
 
-The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. A distributed
-release keeps the integration source in `.src`; ePlugin makes it available while the plugin is enabled.
+The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. When eContainer is
+enabled, ePlugin also makes the optional integration source in `.src-econtainer` available. eContainer can be enabled
+before or after eMessagePipe; its integration source is added and removed as the optional dependency changes state.
 
 The repository also contains a sample project in `src/emessagepipe`.
 
 ## Features
 
-+ MessagePipe registration for eContainer's VContainer-based `LifetimeScope`
++ Optional MessagePipe registration for eContainer's VContainer-based `LifetimeScope`
 + Publish/subscribe brokers: synchronous, asynchronous, and buffered variants
 + Keyed publish/subscribe brokers
 + Request handlers (synchronous and asynchronous) and MessagePipe filters
@@ -101,15 +105,17 @@ The repository also contains a sample project in `src/emessagepipe`.
 
 ## Motivation
 
-MessagePipe is registered through `IServiceCollection`, while eContainer builds its scopes with VContainer's
-`IContainerBuilder`. eMessagePipe bridges the two so `IPublisher<T>` and `ISubscriber<T>` resolve out of the same
-eContainer scope as everything else, with no separate service provider to keep in sync with the scene tree.
+The optional eContainer integration connects MessagePipe's `IServiceCollection` registration to VContainer's
+`IContainerBuilder`, so `IPublisher<T>` and `ISubscriber<T>` resolve from the same eContainer scope as other services.
+It does not create a separate service provider that must be kept in sync with the scene tree. If eContainer is not
+enabled, eMessagePipe only installs the MessagePipe packages and does not add the VContainer bridge.
 
 ## Testing
 
 This project needs more testing to move forward. Feel free to participate and provide feedback.
 
-The current CI configuration builds and tests pull requests with Godot 4.7.2 and .NET 8.
+The current CI configuration builds and tests pull requests with Godot 4.7.2 and .NET 8, with the sample project's
+eContainer integration enabled.
 
 Tested combinations:
 

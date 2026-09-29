@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A Godot 4.7 (C#) project. The Godot project root is `src/emessagepipe/` (not the repo root) — `eMessagePipe.csproj` and `project.godot` live there. The project itself is mostly a testbed/host for a set of custom Godot editor plugins developed in-repo under `src/emessagepipe/addons/`:
 
 - **eContainer** — a VContainer-based dependency injection container for Godot (`Enaweg.Container` / `Enaweg.Container.Godot` namespaces).
-- **eMessagePipe** — wires the [MessagePipe](https://github.com/Cysharp/MessagePipe) pub/sub library into eContainer's DI container (`Enaweg.MessagePipe` namespace).
+- **eMessagePipe** — adds [MessagePipe](https://github.com/Cysharp/MessagePipe) and optionally wires it into eContainer's DI container (`Enaweg.MessagePipe` namespace).
 - **eLogger** — wires [ZLogger](https://github.com/Cysharp/ZLogger) into Godot's console/debugger (`Enaweg.Logger` namespace).
 - **ePlugin** — the framework the other three plugins are built on (`Enaweg.Plugin` namespace). It provides `IEEditorPlugin`/`IEEditorPluginBuilder` for declaring what a plugin needs (autoloads, NuGet packages, project references, directories to toggle) and an internal engine that applies/reverses that "recipe" when a plugin is enabled/disabled in the Godot editor, driving `dotnet` (add/remove package, add/remove project reference, solution edits) under the hood.
 - **gdUnit4** — vendored third-party unit test framework/runner for Godot + C#.
@@ -44,7 +44,7 @@ Registration entry point: `LifetimeScope.Configure(IContainerBuilder)` (override
 
 ### eMessagePipe integration
 
-`ContainerBuilderExtensions.RegisterMessagePipe(this IContainerBuilder)` bridges VContainer's `IContainerBuilder` to MessagePipe's `IServiceCollection`-based registration via a `ContainerBuilderProxy`/`ObjectResolverProxy` shim (`Enaweg.MessagePipe.VContainer` namespace), so `IPublisher<T>`/`ISubscriber<T>` (and keyed/async/buffered/request-handler variants) resolve out of the same eContainer scope as everything else.
+When eContainer is enabled, `ContainerBuilderExtensions.RegisterMessagePipe(this IContainerBuilder)` bridges VContainer's `IContainerBuilder` to MessagePipe's `IServiceCollection`-based registration via a `ContainerBuilderProxy`/`ObjectResolverProxy` shim (`Enaweg.MessagePipe.VContainer` namespace), so `IPublisher<T>`/`ISubscriber<T>` (and keyed/async/buffered/request-handler variants) resolve out of the same eContainer scope as everything else. eMessagePipe declares eContainer as an optional ePlugin dependency and toggles this integration source accordingly.
 
 ### No application code yet
 
