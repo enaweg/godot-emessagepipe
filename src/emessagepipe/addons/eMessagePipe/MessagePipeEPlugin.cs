@@ -18,13 +18,13 @@ public partial class MessagePipeEPlugin : EditorPlugin, IEEditorPlugin
 
     void IEEditorPlugin.CreateRecipe(IEEditorPluginBuilder builder)
     {
-        var srcDirectory = $"{this.GetPluginDirectory()}/.src";
+        var eContainerSrcDirectory = $"{this.GetPluginDirectory()}/.src-econtainer";
 
         builder
-            .AddPluginDependency("eContainer")
             .AddNuget("MessagePipe", MessagePipeVersion)
             .AddNuget("MessagePipe.Analyzer", MessagePipeVersion)
-            .AddDirectory(srcDirectory);
+            .AddOptionalPluginDependency("eContainer", null, recipe =>
+                recipe.AddDirectory(eContainerSrcDirectory));
     }
 
     public override void _EnablePlugin()

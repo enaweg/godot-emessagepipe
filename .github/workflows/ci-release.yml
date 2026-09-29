@@ -70,10 +70,12 @@ jobs:
         run: |
           sed -i "s/version=\".*\"/version=\"${{ env.VERSION }}\"/g" src/emessagepipe/addons/eMessagePipe/plugin.cfg
 
-      - name: Deactivate plugin for distribution
+      - name: Hide optional integration source for distribution
         shell: bash
         run: |
-          mv src/emessagepipe/addons/eMessagePipe/src src/emessagepipe/addons/eMessagePipe/.src
+          mv src/emessagepipe/addons/eMessagePipe/src src/emessagepipe/addons/eMessagePipe/.src-econtainer
+          test -d src/emessagepipe/addons/eMessagePipe/.src-econtainer
+          test ! -e src/emessagepipe/addons/eMessagePipe/src
 
       - name: Create artifact
         shell: bash
