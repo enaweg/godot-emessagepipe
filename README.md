@@ -77,21 +77,29 @@ The current CI-tested configuration uses:
 + [ePlugin Framework](https://github.com/enaweg/godot-epluginframework)
 + [eContainer](https://github.com/enaweg/godot-econtainer) (optional; required for the VContainer integration)
 
-The project targets `net8.0`.
+The project targets `net8.0` by default and `net9.0` for Android builds.
 
 ## Installation
 
 1. Install and enable [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) in your Godot .NET project.
    Install and enable [eContainer](https://github.com/enaweg/godot-econtainer) as well if you want its VContainer
    integration.
-2. Download the latest eMessagePipe release and extract the archive's `addons/eMessagePipe` directory into your Godot
-   project's `addons` directory. For development, clone this repository instead.
+2. Download the latest eMessagePipe [release](https://github.com/enaweg/godot-emessagepipe/releases) and extract the
+   archive's `addons/eMessagePipe` directory into your Godot project's `addons` directory. For development, clone this
+   repository instead.
 3. Open the project in the Godot .NET editor and enable **eMessagePipe** under **Project > Project Settings > Plugins**.
 4. Let ePlugin complete the package installation and project reload.
 
-The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. When eContainer is
-enabled, ePlugin also makes the optional integration source in `.src-econtainer` available. eContainer can be enabled
-before or after eMessagePipe; its integration source is added and removed as the optional dependency changes state.
+The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. On the current
+`main` branch, when eContainer is enabled, ePlugin also makes the optional integration source in `.src-econtainer`
+available. eContainer can be enabled before or after eMessagePipe; its integration source is added and removed as the
+optional dependency changes state.
+
+The latest published prerelease, v0.2.0 (as of 29 September 2026), predates the optional eContainer integration and
+still requires eContainer. To use the optional integration before it is released, copy
+`src/emessagepipe/addons/eMessagePipe` from the current `main` branch into your project's `addons` directory and rename
+its `src` directory to `.src-econtainer` before opening the project in Godot. This is the same layout produced by the
+release workflow.
 
 The repository also contains a sample project in `src/emessagepipe`.
 
@@ -125,14 +133,16 @@ To build and run the tests locally:
 
 ```bash
 cd src/emessagepipe
+export GODOT_BIN="$(command -v godot)" # point this to your Godot .NET executable
 dotnet restore eMessagePipe.sln
 dotnet build eMessagePipe.sln --configuration Debug --no-restore
+"$GODOT_BIN" --path . --editor --headless --quit-after 2000
 dotnet test eMessagePipe.sln --configuration Debug --no-build --settings .runsettings
 ```
 
 Godot must be available when running the tests.
 See the [CI workflow](https://github.com/enaweg/godot-emessagepipe/blob/main/.github/workflows/ci-pr.yml)
-for the complete headless test setup.
+for the complete headless test setup, including `xvfb-run` for the test step on Linux.
 
 gdUnit is used as the test framework.
 
@@ -146,6 +156,8 @@ Register MessagePipe in an eContainer `LifetimeScope`, then register every messa
 using Enaweg.Container.Godot;
 using Enaweg.MessagePipe;
 using VContainer;
+
+public sealed class PlayerDied { }
 
 public partial class GameLifetimeScope : LifetimeScope
 {
@@ -173,6 +185,23 @@ public partial class GameLifetimeScope : LifetimeScope
 Request handlers and filters are available through `RegisterRequestHandler`, `RegisterAsyncRequestHandler`, and the
 corresponding `Register*Filter` extensions.
 
+Call `RegisterMessagePipe` once per `LifetimeScope` that registers MessagePipe services, then pass its returned
+`MessagePipeOptions` to broker and request-handler registrations. The keyed
+`RegisterMessageBroker<TKey, TMessage>(options)` overload registers both synchronous and asynchronous publishers and
+subscribers. Broker registrations use `options.InstanceLifetime`; request handlers use
+`options.RequestHandlerLifetime`. You can configure these through `RegisterMessagePipe(options => ...)`.
+
+`RegisterRequestHandler<TRequest, TResponse, THandler>(options)` and
+`RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(options)` also provide the corresponding `IRequestAllHandler`
+or `IAsyncRequestAllHandler` entry point when multiple handlers share a request type. The bridge provides separate
+registration methods for message, async message, request and async request filters.
+
+Call `RegisterGlobalMessagePipe()` only from the root scope if you use `GlobalMessagePipe` or its diagnostics window:
+it sets MessagePipe's process-wide provider when the scope is built. For MessagePipe registration extensions written
+for Microsoft DI, `builder.AsServiceCollection()` forwards service descriptors to VContainer and
+`builder.ToMessagePipeBuilder()` exposes MessagePipe's builder API. The service-collection bridge cannot remove a
+registration once forwarded, so `Remove`, `RemoveAt` and `Clear` are unsupported.
+
 ### Example Code (Publishing)
 
 Resolve or inject `IPublisher<TMessage>` and `ISubscriber<TMessage>` from the same VContainer scope:
@@ -193,6 +222,26 @@ public sealed class ScoreService
     {
         playerDied.Publish(new PlayerDied());
     }
+}
+```
+
+Subscriptions are disposable. Keep the returned `IDisposable` for as long as the receiver needs messages, and dispose
+it when the receiver leaves its scope (for a Godot node, `_ExitTree` is a natural place):
+
+```C#
+using System;
+using MessagePipe;
+
+public sealed class PlayerDeathListener : IDisposable
+{
+    private readonly IDisposable subscription;
+
+    public PlayerDeathListener(ISubscriber<PlayerDied> playerDied)
+    {
+        subscription = playerDied.Subscribe(_ => Console.WriteLine("Player died"));
+    }
+
+    public void Dispose() => subscription.Dispose();
 }
 ```
 
