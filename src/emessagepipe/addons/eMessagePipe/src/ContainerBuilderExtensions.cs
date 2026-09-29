@@ -53,7 +53,9 @@ public static class ContainerBuilderExtensions
         var options = new MessagePipeOptions();
         configure(options);
 
-        builder.RegisterInstance(options);
+        // Keep the options descriptor visible to later IServiceCollection-backed MessagePipe
+        // extensions (for example AddInMemoryDistributedMessageBroker).
+        new ContainerBuilderProxy(builder).Add(ServiceDescriptor.Singleton(options));
         builder.Register<MessagePipeDiagnosticsInfo>(Lifetime.Singleton);
         builder.Register<AttributeFilterProvider<MessageHandlerFilterAttribute>>(Lifetime.Singleton);
         builder.Register<AttributeFilterProvider<AsyncMessageHandlerFilterAttribute>>(Lifetime.Singleton);
@@ -271,6 +273,18 @@ public static class ContainerBuilderExtensions
     public static IMessagePipeBuilder ToMessagePipeBuilder(this IContainerBuilder builder)
     {
         return new MessagePipeBuilder(builder.AsServiceCollection());
+    }
+
+    /// <summary>
+    /// Sets the built VContainer resolver as MessagePipe's process-wide provider. Call this from
+    /// the root LifetimeScope when using GlobalMessagePipe or the MessagePipe diagnostics window.
+    /// </summary>
+    /// <param name="builder">The root scope's container builder.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
+    public static IContainerBuilder RegisterGlobalMessagePipe(this IContainerBuilder builder)
+    {
+        builder.RegisterBuildCallback(resolver => GlobalMessagePipe.SetProvider(resolver.AsServiceProvider()));
+        return builder;
     }
 
     static Lifetime GetLifetime(InstanceLifetime lifetime) => LifetimeMapping.ToVContainer(lifetime);

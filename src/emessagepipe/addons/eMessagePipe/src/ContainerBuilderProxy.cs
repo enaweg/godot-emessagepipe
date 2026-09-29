@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.DependencyInjection;
 using VContainer;
@@ -31,17 +32,19 @@ internal sealed class ContainerBuilderProxy : IServiceCollection
 
     static readonly MethodInfo RegisterFactoryDefinition = GetPrivateStaticMethod(nameof(RegisterFactory));
     static readonly MethodInfo RegisterInstanceDefinition = GetPrivateStaticMethod(nameof(RegisterInstance));
+    static readonly ConditionalWeakTable<IContainerBuilder, List<ServiceDescriptor>> DescriptorsByBuilder = new();
 
     static MethodInfo GetPrivateStaticMethod(string name) =>
         typeof(ContainerBuilderProxy).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"{name} could not be located by reflection.");
 
     readonly IContainerBuilder builder;
-    readonly List<ServiceDescriptor> descriptors = new();
+    readonly List<ServiceDescriptor> descriptors;
 
     public ContainerBuilderProxy(IContainerBuilder builder)
     {
         this.builder = builder;
+        descriptors = DescriptorsByBuilder.GetValue(builder, _ => new List<ServiceDescriptor>());
     }
 
     /// <summary>Registers <paramref name="serviceType"/> as its own implementation.</summary>

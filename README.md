@@ -152,6 +152,7 @@ public partial class GameLifetimeScope : LifetimeScope
     protected override void Configure(IContainerBuilder builder)
     {
         var options = builder.RegisterMessagePipe();
+        builder.RegisterGlobalMessagePipe(); // root scope: enables GlobalMessagePipe and diagnostics
 
         // closed message-type services for PlayerDied
         builder.RegisterMessageBroker<PlayerDied>(options);
