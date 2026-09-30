@@ -81,6 +81,7 @@ jobs:
         shell: bash
         run: |
           mkdir out/
+          cp LICENSE src/emessagepipe/addons/eMessagePipe/LICENSE
           cd src/emessagepipe
           zip -r ../../out/eMessagePipe-v${VERSION}.zip addons/eMessagePipe
 
