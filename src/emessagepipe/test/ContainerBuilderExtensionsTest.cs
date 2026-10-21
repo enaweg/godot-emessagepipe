@@ -67,6 +67,66 @@ public class ContainerBuilderExtensionsTest
 	}
 
 	/// <summary>
+	/// A global filter added through the options has to be registered as well, or MessagePipe fails
+	/// to resolve it on the first publish.
+	/// </summary>
+	[TestCase]
+	public void RegisterMessagePipe_RegistersGlobalFilters()
+	{
+		var builder = new ContainerBuilder();
+		var options = builder.RegisterMessagePipe(o => o.AddGlobalMessageHandlerFilter<PingMarkingFilter>());
+		builder.RegisterMessageBroker<Ping>(options);
+
+		using var container = builder.Build();
+
+		var received = new List<string>();
+		using IDisposable subscription = container.Resolve<ISubscriber<Ping>>()
+			.Subscribe(message => received.Add(message.Payload));
+
+		container.Resolve<IPublisher<Ping>>().Publish(new Ping("hello"));
+
+		AssertThat(received).ContainsExactly("hello!");
+	}
+
+	/// <summary>MessagePipe's open-generic brokers resolve without a per-message registration.</summary>
+	[TestCase]
+	public void RegisterMessagePipe_ResolvesBrokersForUnregisteredMessageTypes()
+	{
+		var builder = new ContainerBuilder();
+		builder.RegisterMessagePipe();
+
+		using var container = builder.Build();
+
+		var received = new List<string>();
+		using IDisposable keyless = container.Resolve<ISubscriber<string>>()
+			.Subscribe(message => received.Add(message));
+		using IDisposable keyed = container.Resolve<ISubscriber<int, string>>()
+			.Subscribe(1, message => received.Add(message));
+
+		container.Resolve<IPublisher<string>>().Publish("keyless");
+		container.Resolve<IPublisher<int, string>>().Publish(1, "keyed");
+
+		AssertThat(received).ContainsExactly("keyless", "keyed");
+		AssertThat(container.Resolve<IBufferedPublisher<string>>()).IsNotNull();
+		AssertThat(container.Resolve<IAsyncPublisher<string>>()).IsNotNull();
+	}
+
+	/// <summary>
+	/// Auto-registration scans every loaded assembly, so it stays off unless the caller turns it on.
+	/// </summary>
+	[TestCase]
+	public void RegisterMessagePipe_LeavesAutoRegistrationOffByDefault()
+	{
+		var builder = new ContainerBuilder();
+
+		var options = builder.RegisterMessagePipe();
+		var optedIn = new ContainerBuilder().RegisterMessagePipe(o => o.EnableAutoRegistration = true);
+
+		AssertThat(options.EnableAutoRegistration).IsFalse();
+		AssertThat(optedIn.EnableAutoRegistration).IsTrue();
+	}
+
+	/// <summary>
 	/// Registering twice used to fail deep inside <c>Build()</c> with a conflicting-registration
 	/// error; it now fails at the call site with an actionable message.
 	/// </summary>
@@ -122,6 +182,32 @@ public class ContainerBuilderExtensionsTest
 		container.Resolve<IPublisher<string>>().Publish("hello");
 
 		AssertThat(received).Contains("hello");
+	}
+
+	/// <summary>
+	/// A child scope that registers a broker gets its own; one that does not shares its parent's.
+	/// </summary>
+	[TestCase]
+	public void RegisterMessageBroker_GivesAChildScopeItsOwnBroker()
+	{
+		var builder = new ContainerBuilder();
+		var options = builder.RegisterMessagePipe();
+
+		using var container = builder.Build();
+		using var sharing = container.CreateScope(_ => { });
+		using var owning = container.CreateScope(child => child.RegisterMessageBroker<string>(options));
+
+		var sharingReceived = new List<string>();
+		var owningReceived = new List<string>();
+		using IDisposable sharingSubscription = sharing.Resolve<ISubscriber<string>>()
+			.Subscribe(message => sharingReceived.Add(message));
+		using IDisposable owningSubscription = owning.Resolve<ISubscriber<string>>()
+			.Subscribe(message => owningReceived.Add(message));
+
+		container.Resolve<IPublisher<string>>().Publish("from-parent");
+
+		AssertThat(sharingReceived).ContainsExactly("from-parent");
+		AssertThat(owningReceived).IsEmpty();
 	}
 
 	/// <summary>All six keyed broker contracts have to be registered.</summary>

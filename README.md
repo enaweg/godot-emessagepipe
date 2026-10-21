@@ -170,7 +170,8 @@ gdUnit is used as the test framework.
 
 ### Example Code (Registration)
 
-Register MessagePipe in an eContainer `LifetimeScope`, then register every message type used by that scope.
+Register MessagePipe in an eContainer `LifetimeScope`. Publishers and subscribers then resolve for any message type in
+that scope and its child scopes; registering a message type explicitly is optional.
 
 ```C#
 using Enaweg.Container.Godot;
@@ -186,7 +187,7 @@ public partial class GameLifetimeScope : LifetimeScope
         var options = builder.RegisterMessagePipe();
         builder.RegisterGlobalMessagePipe(); // root scope: enables GlobalMessagePipe and diagnostics
 
-        // closed message-type services for PlayerDied
+        // optional: closed message-type services for PlayerDied, owned by this scope
         builder.RegisterMessageBroker<PlayerDied>(options);
 
         // keyed publishers and subscribers
@@ -195,7 +196,14 @@ public partial class GameLifetimeScope : LifetimeScope
 }
 ```
 
-`RegisterMessageBroker<TMessage>(options)` registers the following closed message-type services:
+`RegisterMessagePipe` runs MessagePipe's own `AddMessagePipe`, so its open-generic publishers, subscribers and
+request-handler entry points resolve for every message type, and global filters added through
+`RegisterMessagePipe(options => options.AddGlobalMessageHandlerFilter<...>())` are registered as well.
+MessagePipe's assembly-scanning auto-registration is off by default; set `options.EnableAutoRegistration = true` to
+opt in.
+
+`RegisterMessageBroker<TMessage>(options)` additionally registers the following closed message-type services in the
+calling scope. A child scope that does this gets its own broker instead of sharing its parent's:
 
 + `IPublisher<TMessage>` and `ISubscriber<TMessage>`
 + `IAsyncPublisher<TMessage>` and `IAsyncSubscriber<TMessage>`
@@ -205,8 +213,8 @@ public partial class GameLifetimeScope : LifetimeScope
 Request handlers and filters are available through `RegisterRequestHandler`, `RegisterAsyncRequestHandler`, and the
 corresponding `Register*Filter` extensions.
 
-Call `RegisterMessagePipe` once per `LifetimeScope` that registers MessagePipe services, then pass its returned
-`MessagePipeOptions` to broker and request-handler registrations. The keyed
+Call `RegisterMessagePipe` once, in the outermost `LifetimeScope` that uses MessagePipe, then pass its returned
+`MessagePipeOptions` to broker and request-handler registrations in that scope or its child scopes. The keyed
 `RegisterMessageBroker<TKey, TMessage>(options)` overload registers both synchronous and asynchronous publishers and
 subscribers. Broker registrations use `options.InstanceLifetime`; request handlers use
 `options.RequestHandlerLifetime`. You can configure these through `RegisterMessagePipe(options => ...)`.
