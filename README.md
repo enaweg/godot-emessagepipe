@@ -216,7 +216,9 @@ Request handlers and filters are available through `RegisterRequestHandler`, `Re
 corresponding `Register*Filter` extensions.
 
 Call `RegisterMessagePipe` once, in the outermost `LifetimeScope` that uses MessagePipe, then pass its returned
-`MessagePipeOptions` to broker and request-handler registrations in that scope or its child scopes. The keyed
+`MessagePipeOptions` to broker and request-handler registrations in that scope or its child scopes. A second call in the
+same scope or in one of its child scopes throws, because the child would otherwise get its own brokers for every message
+type and stop receiving its parent's messages; use `RegisterMessageBroker<TMessage>(options)` to isolate one message type. The keyed
 `RegisterMessageBroker<TKey, TMessage>(options)` overload registers both synchronous and asynchronous publishers and
 subscribers. Broker registrations use `options.InstanceLifetime`; request handlers use
 `options.RequestHandlerLifetime`. You can configure these through `RegisterMessagePipe(options => ...)`.
@@ -227,7 +229,9 @@ or `IAsyncRequestAllHandler` entry point when multiple handlers share a request 
 registration methods for message, async message, request and async request filters.
 
 Call `RegisterGlobalMessagePipe()` only from the root scope if you use `GlobalMessagePipe` or its diagnostics window:
-it sets MessagePipe's process-wide provider when the scope is built. For MessagePipe registration extensions written
+it sets MessagePipe's process-wide provider when the scope is built. Calling it while another such scope is still alive
+throws. MessagePipe cannot clear its provider, so once the scope is disposed `GlobalMessagePipe` throws an
+`InvalidOperationException` until another scope calls `RegisterGlobalMessagePipe()`. For MessagePipe registration extensions written
 for Microsoft DI, `builder.AsServiceCollection()` forwards service descriptors to VContainer and
 `builder.ToMessagePipeBuilder()` exposes MessagePipe's builder API. The service-collection bridge cannot remove a
 registration once forwarded, so `Remove`, `RemoveAt` and `Clear` are unsupported.
@@ -280,7 +284,9 @@ public sealed class PlayerDeathListener : IDisposable
 These helpers live in the plugin's `src` directory and do not depend on eContainer.
 
 `AddTo(node)` disposes a subscription, or any other `IDisposable`, when the node is freed. It follows the node's
-lifetime rather than its tree membership, so reparenting keeps the subscription alive:
+lifetime rather than its tree membership, so reparenting keeps the subscription alive. Calling it while the node is
+busy setting up its children, such as from a child's `_Ready`, works too: the subscription is then attached at the end
+of the frame, and is still disposed if the node is freed before that:
 
 ```C#
 using Enaweg.MessagePipe;
@@ -298,12 +304,14 @@ public partial class Hud : Control
 
 `MainThreadMessageHandlerFilter<T>` and `MainThreadAsyncMessageHandlerFilter<T>` run handlers on Godot's main thread,
 so a message published from a worker thread can still touch nodes. On the main thread the handler runs immediately;
-from elsewhere it is deferred to the end of the frame, and the async variant completes once the handler has finished.
-Use them per subscription or, with eContainer, for every message type:
+from elsewhere it is deferred to the end of the frame, and the async variant completes once the handler has finished
+(cancelling its token while it waits for the main thread cancels it right away). A deferred message can still arrive
+after the subscribing node was freed, so set `Owner` to that node to skip the handler then. Use them per subscription
+or, with eContainer, for every message type:
 
 ```C#
 // one subscription
-playerDied.Subscribe(OnPlayerDied, new MainThreadMessageHandlerFilter<PlayerDied>()).AddTo(this);
+playerDied.Subscribe(OnPlayerDied, new MainThreadMessageHandlerFilter<PlayerDied> { Owner = this }).AddTo(this);
 
 // every message type in the scope
 var options = builder.RegisterMessagePipe(o =>
