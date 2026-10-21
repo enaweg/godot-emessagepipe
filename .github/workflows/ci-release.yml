@@ -5,65 +5,45 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
+  version:
+    name: Read version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Initialize version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # ePlugin compares plugin versions with System.Version, which rejects pre-release suffixes.
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not vMAJOR.MINOR[.PATCH[.REVISION]]."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    uses: ./.github/workflows/build-test.yml
+
   draft-release:
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
     env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
-      DOTNET_NOLOGO: true
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 200
           fetch-tags: true
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Setup Godot .NET
-        uses: chickensoft-games/setup-godot@v2
-        with:
-          version: 4.7.2
-          use-dotnet: true
-
-      - name: Configure Godot executable
-        shell: bash
-        run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
-
-      - name: Restore NuGet packages
-        working-directory: src/emessagepipe
-        run: dotnet restore eMessagePipe.sln
-
-      - name: Build
-        working-directory: src/emessagepipe
-        run: dotnet build eMessagePipe.sln --configuration Debug --no-restore
-
-      - name: Rebuild Godot project cache
-        working-directory: src/emessagepipe
-        run: |
-          "$GODOT_BIN" --path . --editor --headless --quit-after 2000
-
-      - name: Install Xvfb
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes xvfb
-
-      - name: Run gdUnit4 tests
-        working-directory: src/emessagepipe
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
-            dotnet test eMessagePipe.sln --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
-
-      - name: Initialize version
-        shell: bash
-        run: |
-          echo "VERSION=$( git describe --tags | sed -E 's/v([0-9\.]+)(:?.*)/\1/g' )" >> "$GITHUB_ENV"
 
       - name: Set Version to plugin.cfg
         shell: bash
