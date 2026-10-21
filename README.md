@@ -110,8 +110,6 @@ Commit the `addons/eplugin-state.json` file ePlugin writes along with your addon
 `addons/eplugin-state.json.user`: the first records the installed plugin versions for the whole team, the second holds
 unfinished or failed work on one machine.
 
-The repository also contains a sample project in `src/emessagepipe`.
-
 ### Installing from a clone
 
 Copy `src/emessagepipe/addons/eMessagePipe` into your project's `addons` directory and rename its `src` directory to
@@ -210,6 +208,7 @@ it when the receiver leaves its scope:
 
 ```C#
 using System;
+using Godot;
 using MessagePipe;
 
 public sealed class PlayerDeathListener : IDisposable
@@ -218,7 +217,7 @@ public sealed class PlayerDeathListener : IDisposable
 
     public PlayerDeathListener(ISubscriber<PlayerDied> playerDied)
     {
-        subscription = playerDied.Subscribe(_ => Console.WriteLine("Player died"));
+        subscription = playerDied.Subscribe(_ => GD.Print("Player died"));
     }
 
     public void Dispose() => subscription.Dispose();
@@ -410,6 +409,8 @@ Nodes can then subscribe through `GlobalMessagePipe.GetSubscriber<TMessage>()` a
 
 ## Development and testing
 
+The Godot project in `src/emessagepipe` hosts the addons and their tests; its main scene is an empty placeholder.
+
 This project needs more testing to move forward. Feel free to participate and provide feedback.
 
 CI builds and tests every pull request and every push to `main` with Godot 4.7.2 and .NET 8, with eContainer enabled.
@@ -448,6 +449,12 @@ eContainer; the others only need Godot.
 ## Contribute
 
 Feel free to contribute with documentation, testing, or pull requests.
+
++ Build and run the tests as described under [Development and testing](#development-and-testing). Tests that need
+  eContainer belong in `test/econtainer`, all others in `test`, so the build without eContainer keeps working.
++ Write pull request titles and commit messages in the [Conventional Commits](https://www.conventionalcommits.org/)
+  style, such as `feat: ...`, `fix: ...` or `docs: ...`. The release notes are grouped by these prefixes.
++ C# code in `addons/eMessagePipe` and `test` is indented with four spaces, as set in `.editorconfig`.
 
 ## Commercial Support
 
