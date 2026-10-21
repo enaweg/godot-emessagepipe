@@ -38,7 +38,7 @@ MessagePipe with another dependency injection setup.
 
 + **Typed publish/subscribe** — `IPublisher<TMessage>` / `ISubscriber<TMessage>` replace events and signal strings with
   a message type. Subscribing returns an `IDisposable`; `DisposableBag` bundles many subscriptions into one dispose call,
-  which maps cleanly onto a node's `_ExitTree`.
+  and eMessagePipe's `AddTo(node)` disposes a subscription when its node is freed (see [Godot helpers](#godot-helpers)).
 + **Keyed (topic) brokers** — `IPublisher<TKey, TMessage>` / `ISubscriber<TKey, TMessage>` route the same message type by
   key, so one broker can serve many entities, channels or states.
 + **Async publish/subscribe** — `IAsyncPublisher<TMessage>` / `IAsyncSubscriber<TMessage>` await every handler.
@@ -50,23 +50,21 @@ MessagePipe with another dependency injection setup.
 + **Request/response handlers** — `IRequestHandler<TRequest, TResponse>` and its async counterpart give a mediator-style
   one-to-one call; `IRequestAllHandler<TRequest, TResponse>` fans the request out to every registered handler and
   collects the responses.
-+ **Filters** — `MessageHandlerFilter<T>`, `AsyncMessageHandlerFilter<T>`, `RequestHandlerFilter<T>` and their async
-  variants form an ordered middleware pipeline around handlers, for cross-cutting concerns such as logging, validation,
++ **Filters** — `MessageHandlerFilter<T>` and `RequestHandlerFilter<TRequest, TResponse>`, with their async
+  variants, form an ordered middleware pipeline around handlers, for cross-cutting concerns such as logging, validation,
   predicate-based filtering or de-duplication. Filters are themselves resolved from the container and can be attached
   globally, per subscription, or by attribute.
 + **Performance-oriented design** — handler invocation goes through array-based broker cores rather than reflection or
-  delegate chains, keeping publish paths allocation-light; MessagePipe's own benchmarks put it well ahead of plain C#
-  events and Rx-style pipelines.
+  delegate chains, keeping publish paths allocation-light; MessagePipe's own README states it is faster than standard
+  C# events and 78 times faster than Prism's `EventAggregator`.
 + **Diagnostics** — `MessagePipeDiagnosticsInfo` reports live subscription counts, and
   `MessagePipeOptions.EnableCaptureStackTrace` records where each subscription was created, which makes leaked
   subscriptions findable.
 + **`MessagePipe.Analyzer`** — a Roslyn analyzer, installed alongside the library, whose `MPA001` diagnostic reports a
   discarded `IDisposable` from `Subscribe` — the most common source of subscription leaks.
 
-Two upstream notes specific to the eContainer integration: VContainer resolves closed generics only, so every message
-type is registered explicitly (see [Examples](#examples)) rather than through MessagePipe's open-generic
-auto-registration; and MessagePipe's distributed transports (Redis, in-process, WebSocket, gRPC/MagicOnion) ship as
-separate packages that eMessagePipe does not install.
+MessagePipe's distributed transports (Redis, in-process, WebSocket, gRPC/MagicOnion) ship as separate packages that
+eMessagePipe does not install.
 
 ## Requirements
 
