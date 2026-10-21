@@ -102,7 +102,8 @@ this repository targets `net8.0`, and `net9.0` for Android exports.
    doing.
 
 The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. No manual
-`dotnet add package` command is needed.
+`dotnet add package` command is needed. Once it is installed, ePlugin shows eMessagePipe's welcome page with first
+steps; the ePlugin Manager shows it again, along with the plugin's MIT license, in the plugin's details.
 
 ePlugin keeps a directory out of the build by prefixing its name with a dot. A release therefore ships the plugin's
 sources hidden, as `.src` (the Godot helpers) and `.src-econtainer` (the eContainer integration). Enabling eMessagePipe
