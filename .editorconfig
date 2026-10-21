@@ -2,3 +2,8 @@ root = true
 
 [*]
 charset = utf-8
+
+# eMessagePipe's own C# code. The vendored addons keep their upstream style.
+[src/emessagepipe/{addons/eMessagePipe,test}/**.cs]
+indent_style = space
+indent_size = 4
