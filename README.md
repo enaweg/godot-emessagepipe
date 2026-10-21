@@ -130,6 +130,12 @@ itself the same way. See
 
 ### Upgrading from older releases
 
++ The next release after v0.3.1 adds the [Godot helpers](#godot-helpers) and makes these registrations stricter:
+  + `RegisterMessagePipe` also throws when MessagePipe is already registered in a parent scope. Remove the second call,
+    and use `RegisterMessageBroker<TMessage>(options)` where a child scope needs its own broker.
+  + `RegisterRequestHandler` and `RegisterAsyncRequestHandler` only compile when the handler implements the handler
+    interface for exactly `TRequest` and `TResponse`.
+  + `RegisterGlobalMessagePipe` throws while another scope that called it is still alive.
 + Releases before v0.3.0 predate the optional integration and still require eContainer.
 + Releases up to v0.3.1 do not declare an update source yet. To update such an installation through the ePlugin
   Manager, add `https://github.com/enaweg/godot-emessagepipe/releases` for eMessagePipe under **Update sites...**
@@ -137,6 +143,10 @@ itself the same way. See
   or replace `addons/eMessagePipe` with a newer release once by hand.
 
 ## Usage
+
+> [!NOTE]
+> This README describes the `main` branch. The Godot helpers and the stricter registrations listed under
+> [Upgrading from older releases](#upgrading-from-older-releases) are not part of v0.3.1 and ship with the next release.
 
 ### Registering MessagePipe
 
