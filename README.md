@@ -39,7 +39,7 @@ about each other, which keeps scenes, services and systems decoupled and indepen
 + **Updates** from GitHub releases through the ePlugin Manager.
 
 Without eContainer, eMessagePipe installs the MessagePipe packages and its Godot helpers only, and you can use
-MessagePipe with another dependency injection setup.
+MessagePipe with another dependency injection setup (see [Without eContainer](#without-econtainer)).
 
 ### MessagePipe features
 
@@ -141,7 +141,7 @@ itself the same way. See
 ### Registering MessagePipe
 
 Register MessagePipe in an eContainer `LifetimeScope`. Publishers and subscribers then resolve for any message type in
-that scope and its child scopes; registering a message type explicitly is optional.
+that scope and its child scopes, without registering message types one by one:
 
 ```C#
 using Enaweg.Container.Godot;
@@ -154,14 +154,7 @@ public partial class GameLifetimeScope : LifetimeScope
 {
     protected override void Configure(IContainerBuilder builder)
     {
-        var options = builder.RegisterMessagePipe();
-        builder.RegisterGlobalMessagePipe(); // root scope: enables GlobalMessagePipe and diagnostics
-
-        // optional: closed message-type services for PlayerDied, owned by this scope
-        builder.RegisterMessageBroker<PlayerDied>(options);
-
-        // keyed publishers and subscribers
-        builder.RegisterMessageBroker<string, PlayerDied>(options);
+        builder.RegisterMessagePipe();
     }
 }
 ```
@@ -222,6 +215,33 @@ public sealed class PlayerDeathListener : IDisposable
 }
 ```
 
+### Subscribing from a node
+
+Nodes receive their subscribers through an `[Inject]` method, which eContainer calls when it injects the node: add the
+node to the scope's **Auto Inject Nodes** in the inspector, or create it with
+`scope.Container.Instantiate<Hud>(hudScene, parent)`.
+
+```C#
+using Enaweg.MessagePipe;
+using Godot;
+using MessagePipe;
+using VContainer;
+
+public partial class Hud : Control
+{
+    [Inject]
+    public void Construct(ISubscriber<PlayerDied> playerDied)
+    {
+        playerDied
+            .Subscribe(_ => Visible = false, new MainThreadMessageHandlerFilter<PlayerDied> { Owner = this })
+            .AddTo(this);
+    }
+}
+```
+
+`AddTo(this)` ends the subscription when the node is freed, and the filter runs the handler on the main thread even
+when `PlayerDied` is published from a worker thread. Both are described under [Godot helpers](#godot-helpers).
+
 ### Godot helpers
 
 These helpers live in the plugin's `src` directory and do not depend on eContainer.
@@ -236,11 +256,14 @@ using Enaweg.MessagePipe;
 using Godot;
 using MessagePipe;
 
-public partial class Hud : Control
+public partial class GameOverScreen : Control
 {
-    public void Bind(ISubscriber<PlayerDied> playerDied)
+    public override void _Ready()
     {
-        playerDied.Subscribe(_ => Visible = false).AddTo(this);
+        // GlobalMessagePipe needs a provider, see RegisterGlobalMessagePipe or "Without eContainer"
+        GlobalMessagePipe.GetSubscriber<PlayerDied>()
+            .Subscribe(_ => Show())
+            .AddTo(this);
     }
 }
 ```
@@ -277,13 +300,59 @@ so a child scope that calls it gets its own broker instead of sharing its parent
 The keyed `RegisterMessageBroker<TKey, TMessage>(options)` overload registers keyed synchronous and asynchronous
 publishers and subscribers.
 
+A child scope takes the options from its parent's container:
+
+```C#
+using Enaweg.Container.Godot;
+using Enaweg.MessagePipe;
+using MessagePipe;
+using VContainer;
+
+public sealed class EnemyHit { }
+
+public partial class LevelLifetimeScope : LifetimeScope
+{
+    protected override void Configure(IContainerBuilder builder)
+    {
+        var options = Parent.Container.Resolve<MessagePipeOptions>();
+
+        // this level gets its own PlayerDied broker; other message types still reach the parent's
+        builder.RegisterMessageBroker<PlayerDied>(options);
+
+        // keyed by enemy id
+        builder.RegisterMessageBroker<int, EnemyHit>(options);
+    }
+}
+```
+
 ### Request handlers and filters
 
 `RegisterRequestHandler<TRequest, TResponse, THandler>(options)` and
 `RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(options)` register a handler together with the
 `IRequestHandler` and `IRequestAllHandler` entry points (or their async counterparts); register several handlers for one
-request type to use `IRequestAllHandler`. `RegisterMessageHandlerFilter<T>`, `RegisterAsyncMessageHandlerFilter<T>`,
-`RegisterRequestHandlerFilter<T>` and `RegisterAsyncRequestHandlerFilter<T>` register filters.
+request type to use `IRequestAllHandler`. The handler has to implement the handler interface for exactly
+`TRequest` and `TResponse`, otherwise the registration does not compile:
+
+```C#
+using MessagePipe;
+
+public sealed class GetScore { }
+
+public sealed class ScoreHandler : IRequestHandler<GetScore, int>
+{
+    public int Invoke(GetScore request) => 42;
+}
+
+// in Configure
+var options = builder.RegisterMessagePipe();
+builder.RegisterRequestHandler<GetScore, int, ScoreHandler>(options);
+
+// wherever IRequestHandler<GetScore, int> is injected
+int score = getScore.Invoke(new GetScore());
+```
+
+`RegisterMessageHandlerFilter<T>`, `RegisterAsyncMessageHandlerFilter<T>`, `RegisterRequestHandlerFilter<T>` and
+`RegisterAsyncRequestHandlerFilter<T>` register filters.
 
 ### GlobalMessagePipe and Microsoft DI extensions
 
@@ -292,9 +361,42 @@ sets MessagePipe's process-wide provider when the scope is built. Calling it whi
 throws. MessagePipe cannot clear its provider, so once the scope is disposed `GlobalMessagePipe` throws an
 `InvalidOperationException` until another scope calls `RegisterGlobalMessagePipe()`.
 
+```C#
+protected override void Configure(IContainerBuilder builder)
+{
+    builder.RegisterMessagePipe();
+    builder.RegisterGlobalMessagePipe();
+}
+```
+
 For MessagePipe registration extensions written for Microsoft DI, `builder.AsServiceCollection()` forwards service
 descriptors to VContainer and `builder.ToMessagePipeBuilder()` exposes MessagePipe's builder API. The service-collection
 bridge cannot remove a registration once forwarded, so `Remove`, `RemoveAt` and `Clear` are unsupported.
+
+### Without eContainer
+
+MessagePipe only brings the dependency injection *abstractions*. To use it without eContainer, add the
+`Microsoft.Extensions.DependencyInjection` package to your project (a version matching your target framework, such as
+8.x for `net8.0`) and build a provider yourself, for example in an autoload:
+
+```C#
+using Godot;
+using MessagePipe;
+using Microsoft.Extensions.DependencyInjection;
+
+public partial class Messaging : Node
+{
+    public override void _EnterTree()
+    {
+        var services = new ServiceCollection();
+        services.AddMessagePipe();
+        GlobalMessagePipe.SetProvider(services.BuildServiceProvider());
+    }
+}
+```
+
+Nodes can then subscribe through `GlobalMessagePipe.GetSubscriber<TMessage>()` and use the
+[Godot helpers](#godot-helpers) as shown above.
 
 ## Development and testing
 
