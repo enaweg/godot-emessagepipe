@@ -5,21 +5,21 @@ using VContainer;
 namespace Enaweg.MessagePipe.VContainer;
 
 /// <summary>
-/// Translates the lifetime enums used by MessagePipe and
-/// <c>Microsoft.Extensions.DependencyInjection</c> into VContainer's <see cref="Lifetime"/>.
+/// Translates MessagePipe's lifetimes into <c>Microsoft.Extensions.DependencyInjection</c>'s, and
+/// those into VContainer's <see cref="Lifetime"/>.
 /// </summary>
 internal static class LifetimeMapping
 {
     /// <summary>
-    /// Maps a MessagePipe <see cref="InstanceLifetime"/> to the equivalent VContainer lifetime.
+    /// Maps a MessagePipe <see cref="InstanceLifetime"/> to the equivalent service-collection lifetime.
     /// </summary>
     /// <param name="lifetime">The MessagePipe lifetime to translate.</param>
-    /// <returns>The matching <see cref="Lifetime"/>; <see cref="Lifetime.Transient"/> for unknown values.</returns>
-    internal static Lifetime ToVContainer(InstanceLifetime lifetime) => lifetime switch
+    /// <returns>The matching <see cref="ServiceLifetime"/>; <see cref="ServiceLifetime.Transient"/> for unknown values.</returns>
+    internal static ServiceLifetime ToServiceLifetime(InstanceLifetime lifetime) => lifetime switch
     {
-        InstanceLifetime.Singleton => Lifetime.Singleton,
-        InstanceLifetime.Scoped => Lifetime.Scoped,
-        _ => Lifetime.Transient,
+        InstanceLifetime.Singleton => ServiceLifetime.Singleton,
+        InstanceLifetime.Scoped => ServiceLifetime.Scoped,
+        _ => ServiceLifetime.Transient,
     };
 
     /// <summary>

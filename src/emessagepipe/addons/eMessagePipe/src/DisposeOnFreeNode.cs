@@ -14,10 +14,19 @@ namespace Enaweg.MessagePipe;
 /// </remarks>
 internal sealed partial class DisposeOnFreeNode : Node
 {
+    /// <summary>Holders still waiting for their deferred attach, by the instance id of their node.</summary>
+    static readonly Dictionary<ulong, DisposeOnFreeNode> PendingByNodeId = new();
+
     readonly List<IDisposable> disposables = new();
     bool freed;
 
     /// <summary>Returns the holder attached to <paramref name="node"/>, attaching one first if needed.</summary>
+    /// <remarks>
+    /// Godot refuses to add children to a node while it propagates enter-tree, ready or exit-tree
+    /// notifications to its children, such as when a child's <c>_Ready</c> subscribes on its
+    /// parent. The holder is then attached at the end of the frame instead; until that happens it
+    /// already collects disposables, and if the node is freed first it disposes them right then.
+    /// </remarks>
     internal static DisposeOnFreeNode GetOrAttach(Node node)
     {
         for (var i = node.GetChildCount(true) - 1; i >= 0; i--)
@@ -28,9 +37,52 @@ internal sealed partial class DisposeOnFreeNode : Node
             }
         }
 
+        var nodeId = node.GetInstanceId();
+        if (PendingByNodeId.TryGetValue(nodeId, out var pending))
+        {
+            return pending;
+        }
+
         var holder = new DisposeOnFreeNode { Name = nameof(DisposeOnFreeNode) };
-        node.AddChild(holder, false, InternalMode.Back);
+
+        // A node in the tree that is not ready yet is propagating ready to its children, so
+        // adding now would only make Godot print an add_child error. Exit-tree propagation cannot
+        // be detected up front, so that case is caught by checking the parent afterwards.
+        var mayBeBusy = node.IsInsideTree() && !node.IsNodeReady();
+        if (!mayBeBusy && TryAttach(node, holder))
+        {
+            return holder;
+        }
+
+        PendingByNodeId[nodeId] = holder;
+        Callable.From(() => holder.AttachDeferred(node, nodeId)).CallDeferred();
         return holder;
+    }
+
+    static bool TryAttach(Node node, DisposeOnFreeNode holder)
+    {
+        node.AddChild(holder, false, InternalMode.Back);
+        return holder.GetParent() == node;
+    }
+
+    void AttachDeferred(Node node, ulong nodeId)
+    {
+        PendingByNodeId.Remove(nodeId);
+
+        if (!IsInstanceValid(node))
+        {
+            // The node was freed before the holder could follow it: dispose as it would have.
+            Free();
+            return;
+        }
+
+        if (!TryAttach(node, this))
+        {
+            // Deferred calls run after notification propagation, so this is not the busy case
+            // anymore. Dispose rather than hold the disposables in a holder nothing ever frees.
+            GD.PushError($"{nameof(NodeDisposableExtensions.AddTo)} could not attach to {node.Name}; disposing now.");
+            Free();
+        }
     }
 
     /// <summary>Holds <paramref name="disposable"/> until this node is freed.</summary>

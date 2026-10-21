@@ -1,0 +1,105 @@
+name: Build and test
+
+# Shared by CI-PR and CI-Release, so both run the same checks.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/emessagepipe/eMessagePipe.csproj', 'src/emessagepipe/nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Setup Godot .NET
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: true
+
+      - name: Configure Godot executable
+        shell: bash
+        run: echo "GODOT_BIN=$GODOT" >> "$GITHUB_ENV"
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes xvfb
+
+      - name: Restore NuGet packages
+        working-directory: src/emessagepipe
+        run: dotnet restore eMessagePipe.sln
+
+      - name: Build
+        working-directory: src/emessagepipe
+        run: dotnet build eMessagePipe.sln --configuration Debug --no-restore
+
+      - name: Rebuild Godot project cache
+        working-directory: src/emessagepipe
+        run: |
+          "$GODOT_BIN" --path . --editor --headless --quit-after 2000
+
+      - name: Run gdUnit4 tests
+        working-directory: src/emessagepipe
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" \
+            dotnet test eMessagePipe.sln --configuration Debug --no-build --settings .runsettings --verbosity normal -m:1
+
+  build-without-econtainer:
+    name: Build without eContainer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/emessagepipe/eMessagePipe.csproj', 'src/emessagepipe/nuget.config') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Everything compiles into one assembly, so with eContainer present a VContainer
+      # dependency in addons/eMessagePipe/src would go unnoticed. Remove eContainer, the
+      # integration source, the tests that need it and the VContainer packages, as in a project
+      # that installed eMessagePipe on its own.
+      - name: Remove eContainer and its integration
+        working-directory: src/emessagepipe
+        run: |
+          rm -rf addons/eContainer addons/eMessagePipe/src-econtainer test/econtainer
+          dotnet remove eMessagePipe.csproj package VContainer.SourceGenerator
+          dotnet remove eMessagePipe.csproj package VContainer.Standalone
+          sed -i '/addons\/eContainer/d' nuget.config
+
+      - name: Restore NuGet packages
+        working-directory: src/emessagepipe
+        run: dotnet restore eMessagePipe.sln
+
+      - name: Build
+        working-directory: src/emessagepipe
+        run: dotnet build eMessagePipe.sln --configuration Debug --no-restore

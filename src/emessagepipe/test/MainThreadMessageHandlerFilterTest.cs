@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using GdUnit4;
 using Godot;
-using MessagePipe;
-using VContainer;
 using static GdUnit4.Assertions;
 
 namespace Enaweg.MessagePipe.Tests;
@@ -18,152 +17,171 @@ namespace Enaweg.MessagePipe.Tests;
 [RequireGodotRuntime]
 public class MainThreadMessageHandlerFilterTest
 {
-	static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+    static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
 
-	/// <summary>On the main thread the handler runs before <c>Handle</c> returns.</summary>
-	[TestCase]
-	public async Task Handle_RunsImmediatelyOnTheMainThread()
-	{
-		var filter = new MainThreadMessageHandlerFilter<Ping>();
-		var handledBeforeReturn = false;
+    /// <summary>On the main thread the handler runs before <c>Handle</c> returns.</summary>
+    [TestCase]
+    public async Task Handle_RunsImmediatelyOnTheMainThread()
+    {
+        var filter = new MainThreadMessageHandlerFilter<Ping>();
+        var handledBeforeReturn = false;
 
-		await GodotFrames.RunOnMainThread(() =>
-		{
-			var handled = false;
-			filter.Handle(new Ping("main"), _ => handled = true);
-			handledBeforeReturn = handled;
-		}).WaitAsync(Timeout);
+        await GodotFrames.RunOnMainThread(() =>
+        {
+            var handled = false;
+            filter.Handle(new Ping("main"), _ => handled = true);
+            handledBeforeReturn = handled;
+        }).WaitAsync(Timeout);
 
-		AssertThat(handledBeforeReturn).IsTrue();
-	}
+        AssertThat(handledBeforeReturn).IsTrue();
+    }
 
-	/// <summary>From a worker thread the handler is deferred to the main thread.</summary>
-	[TestCase]
-	public async Task Handle_DefersToTheMainThreadFromAWorkerThread()
-	{
-		var filter = new MainThreadMessageHandlerFilter<Ping>();
-		var handledOnMainThread = new ConcurrentQueue<bool>();
+    /// <summary>From a worker thread the handler is deferred to the main thread.</summary>
+    [TestCase]
+    public async Task Handle_DefersToTheMainThreadFromAWorkerThread()
+    {
+        var filter = new MainThreadMessageHandlerFilter<Ping>();
+        var handledOnMainThread = new ConcurrentQueue<bool>();
 
-		await Task.Run(() => filter.Handle(
-			new Ping("worker"),
-			_ => handledOnMainThread.Enqueue(GodotThread.IsMainThread())));
-		await GodotFrames.WaitUntil(() => !handledOnMainThread.IsEmpty);
+        await Task.Run(() => filter.Handle(
+            new Ping("worker"),
+            _ => handledOnMainThread.Enqueue(GodotThread.IsMainThread())));
+        await GodotFrames.WaitUntil(() => !handledOnMainThread.IsEmpty);
 
-		AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
-	}
+        AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
+    }
 
-	/// <summary>
-	/// From a worker thread the async handler runs on the main thread, and the returned task
-	/// completes only after it has finished.
-	/// </summary>
-	[TestCase]
-	public async Task HandleAsync_CompletesAfterTheHandlerRanOnTheMainThread()
-	{
-		var filter = new MainThreadAsyncMessageHandlerFilter<Ping>();
-		var handledOnMainThread = new ConcurrentQueue<bool>();
+    /// <summary>
+    /// A message deferred from a worker thread can arrive after its owner was freed; the handler
+    /// must be skipped then, since it would touch a freed node.
+    /// </summary>
+    [TestCase]
+    public async Task Handle_SkipsTheHandlerOnceTheOwnerIsFreed()
+    {
+        var owner = new Node();
+        var filter = new MainThreadMessageHandlerFilter<Ping> { Owner = owner };
+        var handled = 0;
 
-		await Task.Run(async () => await filter.HandleAsync(
-			new Ping("worker"),
-			default,
-			(_, _) =>
-			{
-				handledOnMainThread.Enqueue(GodotThread.IsMainThread());
-				return default;
-			})).WaitAsync(Timeout);
+        await GodotFrames.RunOnMainThread(() =>
+        {
+            // The main thread is blocked here, so the deferred handler cannot run before the free.
+            Task.Run(() => filter.Handle(new Ping("worker"), _ => Interlocked.Increment(ref handled))).Wait();
+            owner.Free();
+        }).WaitAsync(Timeout);
+        await GodotFrames.WaitUntil(() => false, 2);
 
-		AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
-	}
+        AssertThat(handled).IsEqual(0);
+    }
 
-	/// <summary>A failing async handler surfaces through the returned task.</summary>
-	[TestCase]
-	public async Task HandleAsync_PropagatesHandlerExceptions()
-	{
-		var filter = new MainThreadAsyncMessageHandlerFilter<Ping>();
+    /// <summary>On the main thread the owner check applies as well.</summary>
+    [TestCase]
+    public async Task Handle_SkipsTheHandlerForAFreedOwnerOnTheMainThread()
+    {
+        var owner = new Node();
+        owner.Free();
+        var filter = new MainThreadMessageHandlerFilter<Ping> { Owner = owner };
+        var handled = false;
 
-		Exception? exception = null;
-		try
-		{
-			await Task.Run(async () => await filter.HandleAsync(
-				new Ping("worker"),
-				default,
-				(_, _) => throw new InvalidOperationException("handler failed"))).WaitAsync(Timeout);
-		}
-		catch (Exception caught)
-		{
-			exception = caught;
-		}
+        await GodotFrames.RunOnMainThread(() => filter.Handle(new Ping("main"), _ => handled = true))
+            .WaitAsync(Timeout);
 
-		AssertThat(exception).IsNotNull();
-		AssertThat(exception!.GetType().Name).IsEqual(nameof(InvalidOperationException));
-	}
+        AssertThat(handled).IsFalse();
+    }
 
-	/// <summary>A filter instance passed to <c>Subscribe</c> applies to that subscription.</summary>
-	[TestCase]
-	public async Task Subscribe_WithAFilterInstanceHandlesOnTheMainThread()
-	{
-		var builder = new ContainerBuilder();
-		builder.RegisterMessagePipe();
-		using var container = builder.Build();
-		var publisher = container.Resolve<IPublisher<Ping>>();
-		var handledOnMainThread = new ConcurrentQueue<bool>();
+    /// <summary>
+    /// From a worker thread the async handler runs on the main thread, and the returned task
+    /// completes only after it has finished.
+    /// </summary>
+    [TestCase]
+    public async Task HandleAsync_CompletesAfterTheHandlerRanOnTheMainThread()
+    {
+        var filter = new MainThreadAsyncMessageHandlerFilter<Ping>();
+        var handledOnMainThread = new ConcurrentQueue<bool>();
 
-		using var subscription = container.Resolve<ISubscriber<Ping>>().Subscribe(
-			_ => handledOnMainThread.Enqueue(GodotThread.IsMainThread()),
-			new MainThreadMessageHandlerFilter<Ping>());
+        await Task.Run(async () => await filter.HandleAsync(
+            new Ping("worker"),
+            default,
+            (_, _) =>
+            {
+                handledOnMainThread.Enqueue(GodotThread.IsMainThread());
+                return default;
+            })).WaitAsync(Timeout);
 
-		await Task.Run(() => publisher.Publish(new Ping("worker")));
-		await GodotFrames.WaitUntil(() => !handledOnMainThread.IsEmpty);
+        AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
+    }
 
-		AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
-	}
+    /// <summary>A failing async handler surfaces through the returned task.</summary>
+    [TestCase]
+    public async Task HandleAsync_PropagatesHandlerExceptions()
+    {
+        var filter = new MainThreadAsyncMessageHandlerFilter<Ping>();
 
-	/// <summary>
-	/// Registered as an open-generic global filter, it applies to every message type — which relies
-	/// on the VContainer bridge registering MessagePipe's global filters.
-	/// </summary>
-	[TestCase]
-	public async Task GlobalFilter_HandlesEveryMessageTypeOnTheMainThread()
-	{
-		var builder = new ContainerBuilder();
-		builder.RegisterMessagePipe(o => o.AddGlobalMessageHandlerFilter(typeof(MainThreadMessageHandlerFilter<>)));
-		using var container = builder.Build();
-		var pingPublisher = container.Resolve<IPublisher<Ping>>();
-		var textPublisher = container.Resolve<IPublisher<string>>();
-		var handledOnMainThread = new ConcurrentQueue<bool>();
+        var publishing = Task.Run(async () => await filter.HandleAsync(
+            new Ping("worker"),
+            default,
+            (_, _) => throw new InvalidOperationException("handler failed"))).WaitAsync(Timeout);
 
-		using var pingSubscription = container.Resolve<ISubscriber<Ping>>()
-			.Subscribe(_ => handledOnMainThread.Enqueue(GodotThread.IsMainThread()));
-		using var textSubscription = container.Resolve<ISubscriber<string>>()
-			.Subscribe(_ => handledOnMainThread.Enqueue(GodotThread.IsMainThread()));
+        (await AssertThrown(publishing))!.IsInstanceOf<InvalidOperationException>();
+    }
 
-		await Task.Run(() =>
-		{
-			pingPublisher.Publish(new Ping("worker"));
-			textPublisher.Publish("worker");
-		});
-		await GodotFrames.WaitUntil(() => handledOnMainThread.Count == 2);
+    /// <summary>
+    /// Cancelling while the handler still waits for the main thread cancels the task right away,
+    /// and the handler does not run afterwards.
+    /// </summary>
+    [TestCase]
+    public async Task HandleAsync_CancelsWhileWaitingForTheMainThread()
+    {
+        var filter = new MainThreadAsyncMessageHandlerFilter<Ping>();
+        using var cancellation = new CancellationTokenSource();
+        var handled = 0;
+        var canceledBeforeTheMainThreadRan = false;
 
-		AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true, true);
-	}
+        await GodotFrames.RunOnMainThread(() =>
+        {
+            // The main thread is blocked here, so the deferred handler cannot have started yet.
+            Task pending = Task.CompletedTask;
+            Task.Run(() =>
+            {
+                pending = filter.HandleAsync(new Ping("worker"), cancellation.Token, (_, _) =>
+                {
+                    Interlocked.Increment(ref handled);
+                    return default;
+                }).AsTask();
+                cancellation.Cancel();
+            }).Wait();
+            canceledBeforeTheMainThreadRan = pending.IsCanceled;
+        }).WaitAsync(Timeout);
+        await GodotFrames.WaitUntil(() => false, 2);
 
-	/// <summary>The async filter also works as an open-generic global filter.</summary>
-	[TestCase]
-	public async Task GlobalAsyncFilter_HandlesOnTheMainThread()
-	{
-		var builder = new ContainerBuilder();
-		builder.RegisterMessagePipe(o => o.AddGlobalAsyncMessageHandlerFilter(typeof(MainThreadAsyncMessageHandlerFilter<>)));
-		using var container = builder.Build();
-		var publisher = container.Resolve<IAsyncPublisher<Ping>>();
-		var handledOnMainThread = new ConcurrentQueue<bool>();
+        AssertThat(canceledBeforeTheMainThreadRan).IsTrue();
+        AssertThat(handled).IsEqual(0);
+    }
 
-		using var subscription = container.Resolve<IAsyncSubscriber<Ping>>().Subscribe((_, _) =>
-		{
-			handledOnMainThread.Enqueue(GodotThread.IsMainThread());
-			return default;
-		});
+    /// <summary>A freed owner skips the async handler and still completes the task.</summary>
+    [TestCase]
+    public async Task HandleAsync_SkipsTheHandlerOnceTheOwnerIsFreed()
+    {
+        var owner = new Node();
+        var filter = new MainThreadAsyncMessageHandlerFilter<Ping> { Owner = owner };
+        var handled = 0;
+        Task pending = Task.CompletedTask;
 
-		await Task.Run(async () => await publisher.PublishAsync(new Ping("worker"))).WaitAsync(Timeout);
+        await GodotFrames.RunOnMainThread(() =>
+        {
+            // A statement lambda: returning the task would make Task.Run wait for the handler,
+            // which needs the main thread this blocks.
+            Task.Run(() =>
+            {
+                pending = filter.HandleAsync(new Ping("worker"), default, (_, _) =>
+                {
+                    Interlocked.Increment(ref handled);
+                    return default;
+                }).AsTask();
+            }).Wait();
+            owner.Free();
+        }).WaitAsync(Timeout);
+        await pending.WaitAsync(Timeout);
 
-		AssertThat(new List<bool>(handledOnMainThread)).ContainsExactly(true);
-	}
+        AssertThat(handled).IsEqual(0);
+    }
 }
