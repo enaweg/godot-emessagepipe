@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Enaweg.MessagePipe.VContainer;
 using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +18,9 @@ namespace Enaweg.MessagePipe;
 /// </remarks>
 public static class ContainerBuilderExtensions
 {
+    /// <summary>The provider the live <see cref="RegisterGlobalMessagePipe"/> scope handed to GlobalMessagePipe.</summary>
+    static GlobalServiceProvider? globalProvider;
+
     /// <summary>
     /// Registers MessagePipe's shared services into the scope with default options.
     /// </summary>
@@ -26,7 +29,7 @@ public static class ContainerBuilderExtensions
     /// The <see cref="MessagePipeOptions"/> instance registered into the scope. Pass it to the
     /// <c>RegisterMessageBroker</c> / <c>RegisterRequestHandler</c> overloads.
     /// </returns>
-    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder.</exception>
+    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder or a parent scope.</exception>
     public static MessagePipeOptions RegisterMessagePipe(this IContainerBuilder builder)
     {
         return RegisterMessagePipe(builder, _ => { });
@@ -45,15 +48,22 @@ public static class ContainerBuilderExtensions
     /// The <see cref="MessagePipeOptions"/> instance registered into the scope. Pass it to the
     /// <c>RegisterMessageBroker</c> / <c>RegisterRequestHandler</c> overloads.
     /// </returns>
-    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder.</exception>
+    /// <exception cref="InvalidOperationException">MessagePipe is already registered on this builder or a parent scope.</exception>
+    /// <remarks>
+    /// A second registration in a child scope would give that scope its own brokers for every
+    /// message type, silently cutting it off from messages published in its parents, so it is
+    /// rejected. Use <see cref="RegisterMessageBroker{TMessage}"/> to give a child scope its own
+    /// broker for a specific message type.
+    /// </remarks>
     public static MessagePipeOptions RegisterMessagePipe(this IContainerBuilder builder, Action<MessagePipeOptions> configure)
     {
-        if (builder.Exists(typeof(MessagePipeOptions), true))
+        if (builder.Exists(typeof(MessagePipeOptions), includeInterfaceTypes: true, findParentScopes: true))
         {
             throw new InvalidOperationException(
-                "MessagePipe is already registered on this container builder. Call RegisterMessagePipe once "
-                + "per LifetimeScope and pass the MessagePipeOptions it returns to the RegisterMessageBroker "
-                + "and RegisterRequestHandler overloads.");
+                "MessagePipe is already registered on this container builder or one of its parent scopes. Call "
+                + "RegisterMessagePipe once, in the outermost LifetimeScope that uses MessagePipe, and pass the "
+                + "MessagePipeOptions it returns to the RegisterMessageBroker and RegisterRequestHandler overloads; "
+                + "RegisterMessageBroker gives a child scope its own broker for a message type.");
         }
 
         MessagePipeOptions? registered = null;
@@ -82,7 +92,7 @@ public static class ContainerBuilderExtensions
     public static IContainerBuilder RegisterMessageBroker<TMessage>(this IContainerBuilder builder, MessagePipeOptions options)
     {
         var lifetime = GetLifetime(options.InstanceLifetime);
-        var services = new ContainerBuilderProxy(builder);
+        var services = builder.AsServiceCollection();
 
         // keyless PubSub
         services.Add(typeof(MessageBrokerCore<TMessage>), lifetime);
@@ -120,7 +130,7 @@ public static class ContainerBuilderExtensions
         where TKey : notnull
     {
         var lifetime = GetLifetime(options.InstanceLifetime);
-        var services = new ContainerBuilderProxy(builder);
+        var services = builder.AsServiceCollection();
 
         // keyed PubSub
         services.Add(typeof(MessageBrokerCore<TKey, TMessage>), lifetime);
@@ -146,10 +156,10 @@ public static class ContainerBuilderExtensions
     /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterRequestHandler<TRequest, TResponse, THandler>(this IContainerBuilder builder, MessagePipeOptions options)
-        where THandler : IRequestHandler
+        where THandler : class, IRequestHandlerCore<TRequest, TResponse>
     {
         var lifetime = GetLifetime(options.RequestHandlerLifetime);
-        var services = new ContainerBuilderProxy(builder);
+        var services = builder.AsServiceCollection();
 
         services.Add(typeof(IRequestHandlerCore<TRequest, TResponse>), typeof(THandler), lifetime);
         if (!builder.Exists(typeof(IRequestHandler<TRequest, TResponse>), true))
@@ -176,10 +186,10 @@ public static class ContainerBuilderExtensions
     /// which is process-global and outlives any individual scope.
     /// </remarks>
     public static IContainerBuilder RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(this IContainerBuilder builder, MessagePipeOptions options)
-        where THandler : IAsyncRequestHandler
+        where THandler : class, IAsyncRequestHandlerCore<TRequest, TResponse>
     {
         var lifetime = GetLifetime(options.RequestHandlerLifetime);
-        var services = new ContainerBuilderProxy(builder);
+        var services = builder.AsServiceCollection();
 
         services.Add(typeof(IAsyncRequestHandlerCore<TRequest, TResponse>), typeof(THandler), lifetime);
         if (!builder.Exists(typeof(IAsyncRequestHandler<TRequest, TResponse>), true))
@@ -199,11 +209,7 @@ public static class ContainerBuilderExtensions
     public static IContainerBuilder RegisterMessageHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IMessageHandlerFilter
     {
-        if (!builder.Exists(typeof(T), true))
-        {
-            builder.Register<T>(Lifetime.Transient);
-        }
-        return builder;
+        return RegisterFilter<T>(builder);
     }
 
     /// <summary>Registers an async message handler filter, unless it is already registered.</summary>
@@ -213,11 +219,7 @@ public static class ContainerBuilderExtensions
     public static IContainerBuilder RegisterAsyncMessageHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IAsyncMessageHandlerFilter
     {
-        if (!builder.Exists(typeof(T), true))
-        {
-            builder.Register<T>(Lifetime.Transient);
-        }
-        return builder;
+        return RegisterFilter<T>(builder);
     }
 
     /// <summary>Registers a request handler filter, unless it is already registered.</summary>
@@ -227,11 +229,7 @@ public static class ContainerBuilderExtensions
     public static IContainerBuilder RegisterRequestHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IRequestHandlerFilter
     {
-        if (!builder.Exists(typeof(T), true))
-        {
-            builder.Register<T>(Lifetime.Transient);
-        }
-        return builder;
+        return RegisterFilter<T>(builder);
     }
 
     /// <summary>Registers an async request handler filter, unless it is already registered.</summary>
@@ -241,12 +239,7 @@ public static class ContainerBuilderExtensions
     public static IContainerBuilder RegisterAsyncRequestHandlerFilter<T>(this IContainerBuilder builder)
         where T : class, IAsyncRequestHandlerFilter
     {
-        if (!builder.Exists(typeof(T), true))
-        {
-            builder.Register<T>(Lifetime.Transient);
-        }
-
-        return builder;
+        return RegisterFilter<T>(builder);
     }
 
     /// <summary>
@@ -281,11 +274,53 @@ public static class ContainerBuilderExtensions
     /// </summary>
     /// <param name="builder">The root scope's container builder.</param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Another scope that called this method has not been disposed yet.
+    /// </exception>
+    /// <remarks>
+    /// MessagePipe cannot clear its global provider. Once this scope is disposed, GlobalMessagePipe
+    /// throws <see cref="InvalidOperationException"/> until another scope calls this method.
+    /// </remarks>
     public static IContainerBuilder RegisterGlobalMessagePipe(this IContainerBuilder builder)
     {
-        builder.RegisterBuildCallback(resolver => GlobalMessagePipe.SetProvider(resolver.AsServiceProvider()));
+        if (globalProvider is { IsReleased: false })
+        {
+            throw new InvalidOperationException(
+                "GlobalMessagePipe is already provided by another LifetimeScope that has not been disposed. "
+                + "Call RegisterGlobalMessagePipe from the root LifetimeScope only.");
+        }
+
+        GlobalServiceProvider? provider = null;
+        builder.RegisterBuildCallback(resolver =>
+        {
+            provider = new GlobalServiceProvider(resolver);
+            globalProvider = provider;
+            GlobalMessagePipe.SetProvider(provider);
+        });
+        builder.RegisterDisposeCallback(_ => provider?.Release());
         return builder;
     }
 
-    static Lifetime GetLifetime(InstanceLifetime lifetime) => LifetimeMapping.ToVContainer(lifetime);
+    static IContainerBuilder RegisterFilter<T>(IContainerBuilder builder)
+        where T : class
+    {
+        if (!builder.Exists(typeof(T), true))
+        {
+            builder.AsServiceCollection().AddTransient<T>();
+        }
+
+        return builder;
+    }
+
+    static ServiceLifetime GetLifetime(InstanceLifetime lifetime) => LifetimeMapping.ToServiceLifetime(lifetime);
+
+    static void Add(this IServiceCollection services, Type type, ServiceLifetime lifetime)
+    {
+        services.Add(new ServiceDescriptor(type, type, lifetime));
+    }
+
+    static void Add(this IServiceCollection services, Type serviceType, Type implementationType, ServiceLifetime lifetime)
+    {
+        services.Add(new ServiceDescriptor(serviceType, implementationType, lifetime));
+    }
 }

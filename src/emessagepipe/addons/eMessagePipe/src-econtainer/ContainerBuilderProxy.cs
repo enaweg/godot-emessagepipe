@@ -34,6 +34,10 @@ internal sealed class ContainerBuilderProxy : IServiceCollection
     static readonly MethodInfo RegisterInstanceDefinition = GetPrivateStaticMethod(nameof(RegisterInstance));
     static readonly ConditionalWeakTable<IContainerBuilder, List<ServiceDescriptor>> DescriptorsByBuilder = new();
 
+    // Looked up by reflection: ServiceDescriptor.IsKeyedService only exists from
+    // Microsoft.Extensions.DependencyInjection.Abstractions 8, while MessagePipe only requires 6.
+    static readonly PropertyInfo? IsKeyedServiceProperty = typeof(ServiceDescriptor).GetProperty("IsKeyedService");
+
     static MethodInfo GetPrivateStaticMethod(string name) =>
         typeof(ContainerBuilderProxy).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
         ?? throw new InvalidOperationException($"{name} could not be located by reflection.");
@@ -45,23 +49,6 @@ internal sealed class ContainerBuilderProxy : IServiceCollection
     {
         this.builder = builder;
         descriptors = DescriptorsByBuilder.GetValue(builder, _ => new List<ServiceDescriptor>());
-    }
-
-    /// <summary>Registers <paramref name="serviceType"/> as its own implementation.</summary>
-    /// <param name="serviceType">The concrete type to register.</param>
-    /// <param name="lifetime">The VContainer lifetime to register it with.</param>
-    public void Add(Type serviceType, Lifetime lifetime)
-    {
-        builder.Register(serviceType, lifetime);
-    }
-
-    /// <summary>Registers <paramref name="implementationType"/> behind <paramref name="serviceType"/>.</summary>
-    /// <param name="serviceType">The contract the service resolves as.</param>
-    /// <param name="implementationType">The concrete type to instantiate.</param>
-    /// <param name="lifetime">The VContainer lifetime to register it with.</param>
-    public void Add(Type serviceType, Type implementationType, Lifetime lifetime)
-    {
-        builder.Register(implementationType, lifetime).As(serviceType);
     }
 
     /// <inheritdoc />
@@ -125,6 +112,12 @@ internal sealed class ContainerBuilderProxy : IServiceCollection
 
     void Register(ServiceDescriptor descriptor)
     {
+        if (IsKeyedServiceProperty?.GetValue(descriptor) is true)
+        {
+            throw new NotSupportedException(
+                $"The keyed service {descriptor.ServiceType} cannot be registered: VContainer has no keyed registrations.");
+        }
+
         var lifetime = LifetimeMapping.ToVContainer(descriptor.Lifetime);
 
         if (descriptor.ImplementationInstance is not null)
