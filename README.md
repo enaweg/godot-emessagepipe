@@ -140,12 +140,14 @@ enabled, eMessagePipe only installs the MessagePipe packages and does not add th
 
 This project needs more testing to move forward. Feel free to participate and provide feedback.
 
-The current CI configuration builds and tests pull requests with Godot 4.7.2 and .NET 8, with the sample project's
-eContainer integration enabled.
+CI builds and tests every pull request and every push to `main` with Godot 4.7.2 and .NET 8, with eContainer enabled.
+It also builds the project once with eContainer, the integration source and its tests removed, to check that the Godot
+helpers do not depend on eContainer.
 
 Tested combinations:
 
-+ Godot 4.7.2 + .NET 8 (CI-tested)
++ Godot 4.7.2 + .NET 8 SDK (CI)
++ Godot 4.7.2 + .NET 10 SDK (tested locally)
 
 To build and run the tests locally:
 
@@ -159,10 +161,11 @@ dotnet test eMessagePipe.sln --configuration Debug --no-build --settings .runset
 ```
 
 Godot must be available when running the tests.
-See the [CI workflow](https://github.com/enaweg/godot-emessagepipe/blob/main/.github/workflows/ci-pr.yml)
+See the [build and test workflow](https://github.com/enaweg/godot-emessagepipe/blob/main/.github/workflows/build-test.yml)
 for the complete headless test setup, including `xvfb-run` for the test step on Linux.
 
-gdUnit is used as the test framework.
+[gdUnit4](https://github.com/MikeSchulze/gdUnit4) is used as the test framework. Tests under `test/econtainer` need
+eContainer; the others only need Godot.
 
 ## Examples
 
