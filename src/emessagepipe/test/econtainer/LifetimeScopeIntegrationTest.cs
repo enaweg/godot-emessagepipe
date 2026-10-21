@@ -63,6 +63,32 @@ public class LifetimeScopeIntegrationTest
         }
     }
 
+    /// <summary>
+    /// A node injected from a scope receives messages until it is freed — the pattern the README
+    /// shows for nodes.
+    /// </summary>
+    [TestCase]
+    public void InjectNode_SubscribesANodeUntilItIsFreed()
+    {
+        var scope = LifetimeScope.Create(builder => builder.RegisterMessagePipe());
+        try
+        {
+            var node = new InjectedSubscriberNode();
+            scope.Container.InjectNode(node);
+            var publisher = scope.Container.Resolve<IPublisher<Ping>>();
+
+            publisher.Publish(new Ping("before"));
+            node.Free();
+            publisher.Publish(new Ping("after"));
+
+            AssertThat(node.Received).ContainsExactly("before");
+        }
+        finally
+        {
+            scope.Free();
+        }
+    }
+
     /// <summary>A subscription added to a scope node with <c>AddTo</c> ends when that node is freed.</summary>
     [TestCase]
     public void AddTo_EndsTheSubscriptionWhenTheScopeNodeIsFreed()
