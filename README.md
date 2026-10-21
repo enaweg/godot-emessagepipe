@@ -34,10 +34,11 @@ MessagePipe with another dependency injection setup.
 ### Major features
 
 + **Typed publish/subscribe** — `IPublisher<TMessage>` / `ISubscriber<TMessage>` replace events and signal strings with
-  a message type. Subscribing returns an `IDisposable`; `DisposableBag` bundles many subscriptions into one dispose call,
-  and eMessagePipe's `AddTo(node)` disposes a subscription when its node is freed (see [Godot helpers](#godot-helpers)).
-+ **Keyed (topic) brokers** — `IPublisher<TKey, TMessage>` / `ISubscriber<TKey, TMessage>` route the same message type by
-  key, so one broker can serve many entities, channels or states.
+  a message type. Subscribing returns an `IDisposable`; `DisposableBag` bundles many subscriptions into one dispose
+  call, and eMessagePipe's `AddTo(node)` disposes a subscription when its node is freed (see
+  [Godot helpers](#godot-helpers)).
++ **Keyed (topic) brokers** — `IPublisher<TKey, TMessage>` / `ISubscriber<TKey, TMessage>` route the same message type
+  by key, so one broker can serve many entities, channels or states.
 + **Async publish/subscribe** — `IAsyncPublisher<TMessage>` / `IAsyncSubscriber<TMessage>` await every handler.
   `MessagePipeOptions.DefaultAsyncPublishStrategy` selects `Parallel` or `Sequential` handler execution, and
   `PublishAsync` accepts a `CancellationToken`.
@@ -89,9 +90,9 @@ this repository targets `net8.0`, and `net9.0` for Android exports.
 
 The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. No manual
 `dotnet add package` command is needed. Enabling the plugin also makes its Godot helpers in `.src` available, and when
-eContainer is enabled, ePlugin also makes the optional integration source in `.src-econtainer` available. eContainer can be enabled before or after eMessagePipe; its integration source is added
-and removed as the optional dependency changes state. Releases before v0.3.0 predate the optional integration and still
-require eContainer.
+eContainer is enabled, ePlugin also makes the optional integration source in `.src-econtainer` available. eContainer can
+be enabled before or after eMessagePipe; its integration source is added and removed as the optional dependency changes
+state. Releases before v0.3.0 predate the optional integration and still require eContainer.
 
 To install from a clone of this repository instead of a release, copy `src/emessagepipe/addons/eMessagePipe` into your
 project's `addons` directory and rename its `src` directory to `.src` and its `src-econtainer` directory to
@@ -217,21 +218,21 @@ corresponding `Register*Filter` extensions.
 Call `RegisterMessagePipe` once, in the outermost `LifetimeScope` that uses MessagePipe, then pass its returned
 `MessagePipeOptions` to broker and request-handler registrations in that scope or its child scopes. A second call in the
 same scope or in one of its child scopes throws, because the child would otherwise get its own brokers for every message
-type and stop receiving its parent's messages; use `RegisterMessageBroker<TMessage>(options)` to isolate one message type. The keyed
-`RegisterMessageBroker<TKey, TMessage>(options)` overload registers both synchronous and asynchronous publishers and
-subscribers. Broker registrations use `options.InstanceLifetime`; request handlers use
+type and stop receiving its parent's messages; use `RegisterMessageBroker<TMessage>(options)` to isolate one message
+type. The keyed `RegisterMessageBroker<TKey, TMessage>(options)` overload registers both synchronous and asynchronous
+publishers and subscribers. Broker registrations use `options.InstanceLifetime`; request handlers use
 `options.RequestHandlerLifetime`. You can configure these through `RegisterMessagePipe(options => ...)`.
 
 `RegisterRequestHandler<TRequest, TResponse, THandler>(options)` and
-`RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(options)` also provide the corresponding `IRequestAllHandler`
-or `IAsyncRequestAllHandler` entry point when multiple handlers share a request type. The bridge provides separate
-registration methods for message, async message, request and async request filters.
+`RegisterAsyncRequestHandler<TRequest, TResponse, THandler>(options)` also provide the corresponding
+`IRequestAllHandler` or `IAsyncRequestAllHandler` entry point when multiple handlers share a request type. The bridge
+provides separate registration methods for message, async message, request and async request filters.
 
-Call `RegisterGlobalMessagePipe()` only from the root scope if you use `GlobalMessagePipe` or its diagnostics window:
-it sets MessagePipe's process-wide provider when the scope is built. Calling it while another such scope is still alive
+Call `RegisterGlobalMessagePipe()` only from the root scope if you use `GlobalMessagePipe` or its diagnostics window: it
+sets MessagePipe's process-wide provider when the scope is built. Calling it while another such scope is still alive
 throws. MessagePipe cannot clear its provider, so once the scope is disposed `GlobalMessagePipe` throws an
-`InvalidOperationException` until another scope calls `RegisterGlobalMessagePipe()`. For MessagePipe registration extensions written
-for Microsoft DI, `builder.AsServiceCollection()` forwards service descriptors to VContainer and
+`InvalidOperationException` until another scope calls `RegisterGlobalMessagePipe()`. For MessagePipe registration
+extensions written for Microsoft DI, `builder.AsServiceCollection()` forwards service descriptors to VContainer and
 `builder.ToMessagePipeBuilder()` exposes MessagePipe's builder API. The service-collection bridge cannot remove a
 registration once forwarded, so `Remove`, `RemoveAt` and `Clear` are unsupported.
 
