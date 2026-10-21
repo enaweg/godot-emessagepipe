@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "lastCompletedAttemptId": "61e184ca-205f-436b-bb2c-2bb6cac073fa",
+  "plugins": [
+    {
+      "slug": "eContainer",
+      "version": "0.3.0",
+      "state": "activated"
+    },
+    {
+      "slug": "eLogger",
+      "version": "0.4.0",
+      "state": "activated"
+    },
+    {
+      "slug": "eMessagePipe",
+      "version": "0.3.1",
+      "state": "activated"
+    },
+    {
+      "slug": "ePlugin",
+      "version": "0.10.0",
+      "state": "activated"
+    },
+    {
+      "slug": "gdUnit4",
+      "version": "6.2.2",
+      "state": "activated"
+    }
+  ],
+  "welcomes": [
+    {
+      "slug": "eContainer",
+      "version": "0.3.0",
+      "shownUtc": "2026-10-21T13:05:07.8438726+00:00"
+    },
+    {
+      "slug": "ePlugin",
+      "version": "0.10.0",
+      "shownUtc": "2026-10-21T13:03:46.7304564+00:00"
+    },
+    {
+      "slug": "gdUnit4",
+      "version": "6.2.2",
+      "shownUtc": "2026-10-21T13:05:07.888176+00:00"
+    }
+  ]
+}
