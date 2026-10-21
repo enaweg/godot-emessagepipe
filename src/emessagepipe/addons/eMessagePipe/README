@@ -1,0 +1,21 @@
+[font_size=22][b]Welcome to eMessagePipe[/b][/font_size]
+
+eMessagePipe brings [url=https://github.com/Cysharp/MessagePipe]MessagePipe[/url] to Godot: typed, decoupled publish/subscribe messaging. Components ask for an [code]IPublisher<TMessage>[/code] or [code]ISubscriber<TMessage>[/code] and talk to a message type instead of to each other.
+
+[b]What was installed[/b]
+[ul]
+[b]MessagePipe packages:[/b] the [code]MessagePipe[/code] and [code]MessagePipe.Analyzer[/code] NuGet packages were added to your C# project.
+[b]Godot helpers:[/b] [code]AddTo(node)[/code] disposes a subscription when its node is freed, and [code]MainThreadMessageHandlerFilter<T>[/code] runs handlers on Godot's main thread.
+[b]eContainer integration:[/b] while eContainer is enabled, [code]builder.RegisterMessagePipe()[/code] in a [code]LifetimeScope[/code] lets publishers and subscribers resolve from that scope and its child scopes.
+[/ul]
+
+[b]Where to start[/b]
+With eContainer, call [code]builder.RegisterMessagePipe()[/code] once in the outermost [code]LifetimeScope[/code] that uses messaging, then inject publishers and subscribers wherever you need them. Without eContainer, build a provider with [code]Microsoft.Extensions.DependencyInjection[/code] and use [code]GlobalMessagePipe[/code].
+
+[b]Good to know[/b]
+[ul]
+eContainer can be enabled before or after eMessagePipe; its integration is added and removed as eContainer changes state.
+Keep the [code]IDisposable[/code] returned by [code]Subscribe[/code]: the analyzer reports discarded subscriptions, which would otherwise leak.
+[/ul]
+
+Documentation and source: [url=https://github.com/enaweg/godot-emessagepipe#readme]github.com/enaweg/godot-emessagepipe[/url]
