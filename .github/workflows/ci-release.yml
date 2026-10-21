@@ -20,7 +20,8 @@ jobs:
         shell: bash
         run: |
           version="${GITHUB_REF_NAME#v}"
-          # ePlugin compares plugin versions with System.Version, which rejects pre-release suffixes.
+          # ePlugin before 0.10.0 rejects pre-release suffixes in plugin versions, and eMessagePipe accepts any ePlugin
+          # version, so release tags stay numeric.
           if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
             echo "::error::Tag $GITHUB_REF_NAME is not vMAJOR.MINOR[.PATCH[.REVISION]]."
             exit 1
