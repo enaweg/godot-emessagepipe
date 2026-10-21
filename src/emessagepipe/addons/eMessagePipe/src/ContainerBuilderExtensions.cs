@@ -10,9 +10,11 @@ namespace Enaweg.MessagePipe;
 /// Registers MessagePipe into a VContainer <see cref="IContainerBuilder"/>.
 /// </summary>
 /// <remarks>
-/// This mirrors MessagePipe's own <c>ServiceCollectionExtensions</c>, minus the open-generic
-/// registrations: VContainer resolves closed generics only, so every message type has to be
-/// registered explicitly with <see cref="RegisterMessageBroker{TMessage}"/> and friends.
+/// <see cref="RegisterMessagePipe(IContainerBuilder, Action{MessagePipeOptions})"/> runs MessagePipe's
+/// own <c>AddMessagePipe</c> through <see cref="ContainerBuilderProxy"/>, so its open-generic
+/// publishers, subscribers and request-handler entry points resolve for every message type.
+/// <see cref="RegisterMessageBroker{TMessage}"/> and friends add closed registrations on top, which
+/// gives a child scope its own broker instead of falling back to its parent's.
 /// </remarks>
 public static class ContainerBuilderExtensions
 {
@@ -34,7 +36,11 @@ public static class ContainerBuilderExtensions
     /// Registers MessagePipe's shared services into the scope, configuring the options first.
     /// </summary>
     /// <param name="builder">The scope's container builder.</param>
-    /// <param name="configure">Callback applied to the options before they are registered.</param>
+    /// <param name="configure">
+    /// Callback applied to the options before they are registered. Global filters added here are
+    /// registered too. <see cref="MessagePipeOptions.EnableAutoRegistration"/> starts out
+    /// <see langword="false"/>, because it scans every loaded assembly; set it to opt in.
+    /// </param>
     /// <returns>
     /// The <see cref="MessagePipeOptions"/> instance registered into the scope. Pass it to the
     /// <c>RegisterMessageBroker</c> / <c>RegisterRequestHandler</c> overloads.
@@ -50,26 +56,19 @@ public static class ContainerBuilderExtensions
                 + "and RegisterRequestHandler overloads.");
         }
 
-        var options = new MessagePipeOptions();
-        configure(options);
+        MessagePipeOptions? registered = null;
+        builder.AsServiceCollection().AddMessagePipe(options =>
+        {
+            options.EnableAutoRegistration = false;
+            configure(options);
+            registered = options;
+        });
 
-        // Keep the options descriptor visible to later IServiceCollection-backed MessagePipe
-        // extensions (for example AddInMemoryDistributedMessageBroker).
-        new ContainerBuilderProxy(builder).Add(ServiceDescriptor.Singleton(options));
-        builder.Register<MessagePipeDiagnosticsInfo>(Lifetime.Singleton);
-        builder.Register<AttributeFilterProvider<MessageHandlerFilterAttribute>>(Lifetime.Singleton);
-        builder.Register<AttributeFilterProvider<AsyncMessageHandlerFilterAttribute>>(Lifetime.Singleton);
-        builder.Register<AttributeFilterProvider<RequestHandlerFilterAttribute>>(Lifetime.Singleton);
-        builder.Register<AttributeFilterProvider<AsyncRequestHandlerFilterAttribute>>(Lifetime.Singleton);
-        builder.Register<FilterAttachedMessageHandlerFactory>(Lifetime.Singleton);
-        builder.Register<FilterAttachedAsyncMessageHandlerFactory>(Lifetime.Singleton);
-        builder.Register<FilterAttachedRequestHandlerFactory>(Lifetime.Singleton);
-        builder.Register<FilterAttachedAsyncRequestHandlerFactory>(Lifetime.Singleton);
-        builder.Register<EventFactory>(Lifetime.Singleton);
-
+        // Microsoft DI provides IServiceProvider itself; VContainer does not.
         builder.Register<IServiceProvider, ObjectResolverProxy>(Lifetime.Scoped);
 
-        return options;
+        return registered
+            ?? throw new InvalidOperationException("MessagePipe did not apply the options callback.");
     }
 
     /// <summary>
@@ -118,6 +117,7 @@ public static class ContainerBuilderExtensions
     /// <param name="options">The options returned by <see cref="RegisterMessagePipe(IContainerBuilder)"/>.</param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IContainerBuilder RegisterMessageBroker<TKey, TMessage>(this IContainerBuilder builder, MessagePipeOptions options)
+        where TKey : notnull
     {
         var lifetime = GetLifetime(options.InstanceLifetime);
         var services = new ContainerBuilderProxy(builder);

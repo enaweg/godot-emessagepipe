@@ -38,6 +38,12 @@ public sealed class PingMessageFilter : MessageHandlerFilter<Ping>
 	public override void Handle(Ping message, Action<Ping> next) => next(message);
 }
 
+/// <summary>A message handler filter that marks every message it passes on, used as a global filter.</summary>
+public sealed class PingMarkingFilter : MessageHandlerFilter<Ping>
+{
+	public override void Handle(Ping message, Action<Ping> next) => next(new Ping(message.Payload + "!"));
+}
+
 /// <summary>An async message handler filter used only by these tests.</summary>
 public sealed class AsyncPingMessageFilter : AsyncMessageHandlerFilter<Ping>
 {
