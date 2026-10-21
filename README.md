@@ -8,13 +8,10 @@
 with an optional integration for [eContainer](https://github.com/enaweg/godot-econtainer).**
 
 [![CI](https://github.com/enaweg/godot-emessagepipe/actions/workflows/ci-pr.yml/badge.svg)](https://github.com/enaweg/godot-emessagepipe/actions/workflows/ci-pr.yml)
-![Godot 4.4](https://img.shields.io/badge/Godot-v4.4-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
-![Godot 4.5](https://img.shields.io/badge/Godot-v4.5-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
-![Godot 4.6](https://img.shields.io/badge/Godot-v4.6-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 ![Godot 4.7](https://img.shields.io/badge/Godot-v4.7-202020?logo=godot-engine&logoColor=blue&color=darkgreen&labelColor=202020)
 
-![Dotnet 8](https://img.shields.io/badge/8-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
-![Dotnet 10](https://img.shields.io/badge/10-02020?logo=dotnet&logoSize=auto&logoColor=purple&color=darkgreen&labelColor=E0E0E0)
+![Dotnet 8](https://img.shields.io/badge/8-darkgreen?logo=dotnet&logoSize=auto&logoColor=purple&labelColor=E0E0E0)
+![Dotnet 10](https://img.shields.io/badge/10-darkgreen?logo=dotnet&logoSize=auto&logoColor=purple&labelColor=E0E0E0)
 
 ![MessagePipe 1.8.2](https://img.shields.io/badge/MessagePipe-v1.8.2-202020?color=darkgreen&labelColor=202020)
 
@@ -72,11 +69,12 @@ The current CI-tested configuration uses:
 
 + [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/)
 + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-+ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) (0.9.0 or newer for updates through the ePlugin
-  Manager)
++ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) 0.7.0, the version included in this repository
+  (0.9.0 or newer adds updates through the ePlugin Manager)
 + [eContainer](https://github.com/enaweg/godot-econtainer) (optional; required for the VContainer integration)
 
-The project targets `net8.0` by default and `net9.0` for Android builds.
+eMessagePipe's sources compile into your Godot project, so your project's target framework applies. The project in
+this repository targets `net8.0`, and `net9.0` for Android exports.
 
 ## Installation
 
