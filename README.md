@@ -74,7 +74,8 @@ The current CI-tested configuration uses:
 
 + [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/)
 + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-+ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework)
++ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) (0.9.0 or newer for updates through the ePlugin
+  Manager)
 + [eContainer](https://github.com/enaweg/godot-econtainer) (optional; required for the VContainer integration)
 
 The project targets `net8.0` by default and `net9.0` for Android builds.
@@ -90,18 +91,36 @@ The project targets `net8.0` by default and `net9.0` for Android builds.
 3. Open the project in the Godot .NET editor and enable **eMessagePipe** under **Project > Project Settings > Plugins**.
 4. Let ePlugin complete the package installation and project reload.
 
-The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. On the current
-`main` branch, when eContainer is enabled, ePlugin also makes the optional integration source in `.src-econtainer`
-available. eContainer can be enabled before or after eMessagePipe; its integration source is added and removed as the
-optional dependency changes state.
+The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. No manual
+`dotnet add package` command is needed. When eContainer is enabled, ePlugin also makes the optional integration source
+in `.src-econtainer` available. eContainer can be enabled before or after eMessagePipe; its integration source is added
+and removed as the optional dependency changes state. Releases before v0.3.0 predate the optional integration and still
+require eContainer.
 
-The latest published prerelease, v0.2.0 (as of 29 September 2026), predates the optional eContainer integration and
-still requires eContainer. To use the optional integration before it is released, copy
-`src/emessagepipe/addons/eMessagePipe` from the current `main` branch into your project's `addons` directory and rename
-its `src` directory to `.src-econtainer` before opening the project in Godot. This is the same layout produced by the
-release workflow.
+To install from a clone of this repository instead of a release, copy `src/emessagepipe/addons/eMessagePipe` into your
+project's `addons` directory and rename its `src` directory to `.src-econtainer` before opening the project in Godot.
+This is the same layout produced by the release workflow.
+
+Commit the `addons/eplugin-state.json` file ePlugin writes along with your addons, but not
+`addons/eplugin-state.json.user`: the first records the installed plugin versions for the whole team, the second holds
+unfinished or failed work on one machine.
 
 The repository also contains a sample project in `src/emessagepipe`.
+
+### Updates
+
+eMessagePipe declares its [releases](https://github.com/enaweg/godot-emessagepipe/releases) as its update source in
+`plugin.cfg`, along with links to this documentation and its source code. With
+[ePlugin](https://github.com/enaweg/godot-epluginframework) 0.9.0 or newer, the **ePlugin Manager** (the ePlugin button
+on the main toolbar, or **Project > Tools > ePlugin Manager...**) shows these links in the plugin's details, checks for
+new eMessagePipe versions, installs them with a backup and rollback, and offers older versions as well. ePlugin updates
+itself the same way. See
+[Updating plugins](https://github.com/enaweg/godot-epluginframework/blob/main/docs/updating-plugins.md) for details.
+
+Releases up to v0.3.1 do not declare an update source yet. To update such an installation through the ePlugin Manager,
+add `https://github.com/enaweg/godot-emessagepipe/releases` for eMessagePipe under **Update sites...**
+(see [Project update sites](https://github.com/enaweg/godot-epluginframework/blob/main/docs/updating-plugins.md#project-update-sites)),
+or replace `addons/eMessagePipe` with a newer release once by hand.
 
 ## Features
 
@@ -110,6 +129,7 @@ The repository also contains a sample project in `src/emessagepipe`.
 + Keyed publish/subscribe brokers
 + Request handlers (synchronous and asynchronous) and MessagePipe filters
 + Self-installing NuGet packages via ePlugin Framework
++ Updates from GitHub releases through the ePlugin Manager
 
 ## Motivation
 
@@ -254,12 +274,6 @@ public sealed class PlayerDeathListener : IDisposable
 ## Contribute
 
 Feel free to contribute with documentation, testing, or pull requests.
-
-## Roadmap
-
-* stabilize current API
-* improve documentation
-* expand automated testing
 
 ## Commercial Support
 
