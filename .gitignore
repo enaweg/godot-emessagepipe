@@ -23,3 +23,6 @@ reports/
 gdunit4_testadapter_v*/
 
 build/
+
+# ePlugin local recovery state
+eplugin-state.json.user

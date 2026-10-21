@@ -80,9 +80,10 @@ The current CI-tested configuration uses:
 
 + [Godot 4.7.2 .NET](https://godotengine.org/download/archive/4.7.2-stable/)
 + [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-+ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) 0.7.0, the version included in this repository
++ [ePlugin Framework](https://github.com/enaweg/godot-epluginframework) 0.10.0, the version included in this repository
   (0.9.0 or newer adds updates through the ePlugin Manager)
-+ [eContainer](https://github.com/enaweg/godot-econtainer) (optional; required for the VContainer integration)
++ [eContainer](https://github.com/enaweg/godot-econtainer) 0.3.0, the version included in this repository (optional;
+  required for the VContainer integration)
 
 eMessagePipe's sources compile into your Godot project, so your project's target framework applies. The project in
 this repository targets `net8.0`, and `net9.0` for Android exports.
@@ -95,8 +96,10 @@ this repository targets `net8.0`, and `net9.0` for Android exports.
 2. Download the latest eMessagePipe [release](https://github.com/enaweg/godot-emessagepipe/releases) and extract the
    archive's `addons/eMessagePipe` directory into your Godot project's `addons` directory. To install from a clone of
    this repository instead, see [Installing from a clone](#installing-from-a-clone).
-3. Open the project in the Godot .NET editor and enable **eMessagePipe** under **Project > Project Settings > Plugins**.
-4. Let ePlugin complete the package installation and project reload.
+3. Open the project in the Godot .NET editor and enable **eMessagePipe** under **Project > Project Settings > Plugins**,
+   or in the ePlugin Manager (see [Updates](#updates)).
+4. Let ePlugin complete the package installation and project rebuild; a separate progress window shows what it is
+   doing.
 
 The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. No manual
 `dotnet add package` command is needed.
@@ -106,9 +109,10 @@ sources hidden, as `.src` (the Godot helpers) and `.src-econtainer` (the eContai
 makes `.src` available, and ePlugin makes `.src-econtainer` available while eContainer is enabled. eContainer can be
 enabled before or after eMessagePipe; the integration source is added and removed as it changes state.
 
-Commit the `addons/eplugin-state.json` file ePlugin writes along with your addons, but not
-`addons/eplugin-state.json.user`: the first records the installed plugin versions for the whole team, the second holds
-unfinished or failed work on one machine.
+Commit the `addons/eplugin-state.json` file ePlugin writes along with your addons: it records the installed plugin
+versions, accepted licenses and shown welcome pages for the whole team. Add `addons/eplugin-state.json.user` to your
+`.gitignore` instead, as it holds unfinished or failed work on one machine. See
+[Plugin state files](https://github.com/enaweg/godot-epluginframework/blob/main/docs/plugin-state.md) for details.
 
 ### Installing from a clone
 
