@@ -98,8 +98,8 @@ and removed as the optional dependency changes state. Releases before v0.3.0 pre
 require eContainer.
 
 To install from a clone of this repository instead of a release, copy `src/emessagepipe/addons/eMessagePipe` into your
-project's `addons` directory and rename its `src` directory to `.src-econtainer` before opening the project in Godot.
-This is the same layout produced by the release workflow.
+project's `addons` directory and rename its `src-econtainer` directory to `.src-econtainer` before opening the project
+in Godot. This is the same layout produced by the release workflow.
 
 Commit the `addons/eplugin-state.json` file ePlugin writes along with your addons, but not
 `addons/eplugin-state.json.user`: the first records the installed plugin versions for the whole team, the second holds
