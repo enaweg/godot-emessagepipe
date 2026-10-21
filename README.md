@@ -31,8 +31,8 @@ about each other, which keeps scenes, services and systems decoupled and indepen
 
 When [eContainer](https://github.com/enaweg/godot-econtainer) is enabled, eMessagePipe integrates MessagePipe 1.8.2
 into its scopes, so publishers and subscribers resolve from the same `LifetimeScope` as the rest of your registrations.
-Without eContainer, eMessagePipe still installs the MessagePipe packages, and you can use MessagePipe with another
-dependency injection setup.
+Without eContainer, eMessagePipe still installs the MessagePipe packages and its Godot helpers, and you can use
+MessagePipe with another dependency injection setup.
 
 ### Major features
 
@@ -92,14 +92,14 @@ The project targets `net8.0` by default and `net9.0` for Android builds.
 4. Let ePlugin complete the package installation and project reload.
 
 The plugin adds the `MessagePipe` and `MessagePipe.Analyzer` NuGet packages to the Godot C# project. No manual
-`dotnet add package` command is needed. When eContainer is enabled, ePlugin also makes the optional integration source
-in `.src-econtainer` available. eContainer can be enabled before or after eMessagePipe; its integration source is added
+`dotnet add package` command is needed. Enabling the plugin also makes its Godot helpers in `.src` available, and when
+eContainer is enabled, ePlugin also makes the optional integration source in `.src-econtainer` available. eContainer can be enabled before or after eMessagePipe; its integration source is added
 and removed as the optional dependency changes state. Releases before v0.3.0 predate the optional integration and still
 require eContainer.
 
 To install from a clone of this repository instead of a release, copy `src/emessagepipe/addons/eMessagePipe` into your
-project's `addons` directory and rename its `src-econtainer` directory to `.src-econtainer` before opening the project
-in Godot. This is the same layout produced by the release workflow.
+project's `addons` directory and rename its `src` directory to `.src` and its `src-econtainer` directory to
+`.src-econtainer` before opening the project in Godot. This is the same layout produced by the release workflow.
 
 Commit the `addons/eplugin-state.json` file ePlugin writes along with your addons, but not
 `addons/eplugin-state.json.user`: the first records the installed plugin versions for the whole team, the second holds
@@ -128,6 +128,8 @@ or replace `addons/eMessagePipe` with a newer release once by hand.
 + Publish/subscribe brokers: synchronous, asynchronous, and buffered variants
 + Keyed publish/subscribe brokers
 + Request handlers (synchronous and asynchronous) and MessagePipe filters
++ Godot helpers that work with or without eContainer: subscriptions disposed with their node, and filters that run
+  handlers on the main thread
 + Self-installing NuGet packages via ePlugin Framework
 + Updates from GitHub releases through the ePlugin Manager
 
@@ -254,7 +256,7 @@ public sealed class ScoreService
 ```
 
 Subscriptions are disposable. Keep the returned `IDisposable` for as long as the receiver needs messages, and dispose
-it when the receiver leaves its scope (for a Godot node, `_ExitTree` is a natural place):
+it when the receiver leaves its scope:
 
 ```C#
 using System;
@@ -271,6 +273,44 @@ public sealed class PlayerDeathListener : IDisposable
 
     public void Dispose() => subscription.Dispose();
 }
+```
+
+### Godot helpers
+
+These helpers live in the plugin's `src` directory and do not depend on eContainer.
+
+`AddTo(node)` disposes a subscription, or any other `IDisposable`, when the node is freed. It follows the node's
+lifetime rather than its tree membership, so reparenting keeps the subscription alive:
+
+```C#
+using Enaweg.MessagePipe;
+using Godot;
+using MessagePipe;
+
+public partial class Hud : Control
+{
+    public void Bind(ISubscriber<PlayerDied> playerDied)
+    {
+        playerDied.Subscribe(_ => Visible = false).AddTo(this);
+    }
+}
+```
+
+`MainThreadMessageHandlerFilter<T>` and `MainThreadAsyncMessageHandlerFilter<T>` run handlers on Godot's main thread,
+so a message published from a worker thread can still touch nodes. On the main thread the handler runs immediately;
+from elsewhere it is deferred to the end of the frame, and the async variant completes once the handler has finished.
+Use them per subscription or, with eContainer, for every message type:
+
+```C#
+// one subscription
+playerDied.Subscribe(OnPlayerDied, new MainThreadMessageHandlerFilter<PlayerDied>()).AddTo(this);
+
+// every message type in the scope
+var options = builder.RegisterMessagePipe(o =>
+{
+    o.AddGlobalMessageHandlerFilter(typeof(MainThreadMessageHandlerFilter<>));
+    o.AddGlobalAsyncMessageHandlerFilter(typeof(MainThreadAsyncMessageHandlerFilter<>));
+});
 ```
 
 ## Related projects
