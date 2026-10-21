@@ -64,6 +64,32 @@ public class LifetimeScopeIntegrationTest
     }
 
     /// <summary>
+    /// A scope subclass can take the options from its parent's container in <c>Configure</c> to
+    /// own a broker — the pattern the README shows for child scopes.
+    /// </summary>
+    [TestCase]
+    public void ScopeSubclass_OwnsABrokerWithItsParentsOptions()
+    {
+        var parent = LifetimeScope.Create(builder => builder.RegisterMessagePipe());
+        try
+        {
+            var child = parent.CreateChild<BrokerOwningLifetimeScope>();
+
+            var received = new List<string>();
+            using var subscription = child.Container.Resolve<ISubscriber<Ping>>()
+                .Subscribe(message => received.Add(message.Payload));
+            parent.Container.Resolve<IPublisher<Ping>>().Publish(new Ping("from-parent"));
+            child.Container.Resolve<IPublisher<Ping>>().Publish(new Ping("from-child"));
+
+            AssertThat(received).ContainsExactly("from-child");
+        }
+        finally
+        {
+            parent.Free();
+        }
+    }
+
+    /// <summary>
     /// A node injected from a scope receives messages until it is freed — the pattern the README
     /// shows for nodes.
     /// </summary>
