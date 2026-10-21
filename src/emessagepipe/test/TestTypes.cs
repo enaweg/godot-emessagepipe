@@ -84,3 +84,11 @@ public interface IRecorder
 public sealed class RecorderImplementation : IRecorder
 {
 }
+
+/// <summary>A disposable that counts how often it was disposed.</summary>
+public sealed class CountingDisposable : IDisposable
+{
+	public int DisposeCount { get; private set; }
+
+	public void Dispose() => DisposeCount++;
+}
