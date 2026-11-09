@@ -25,7 +25,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('src/emessagepipe/eMessagePipe.csproj', 'src/emessagepipe/nuget.config') }}
@@ -78,7 +78,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('src/emessagepipe/eMessagePipe.csproj', 'src/emessagepipe/nuget.config') }}
